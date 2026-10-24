@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/chat_message.dart';
 import '../services/ai_service.dart';
@@ -82,6 +84,25 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _persist() => _store.save(_sessions);
 
+
+  String? _attachedFileName;
+  String? _attachedFileText;
+
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['txt', 'md', 'dart', 'py', 'js', 'html', 'css', 'json', 'csv', 'cpp', 'c', 'java'],
+    );
+    if (result != null && result.files.single.path != null) {
+      final file = File(result.files.single.path!);
+      final text = await file.readAsString();
+      setState(() {
+        _attachedFileName = result.files.single.name;
+        _attachedFileText = text;
+      });
+    }
+  }
+
   Future<void> _pickImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 1024, imageQuality: 80);
     if (image != null) {
@@ -96,14 +117,23 @@ class _ChatPageState extends State<ChatPage> {
 
     final s = _current ?? _createSession();
     final currentImage = _selectedImageBase64;
+    final currentFileText = _attachedFileText;
+    
+    // Combine typed text with the file content
+    String finalText = text;
+    if (currentFileText != null) {
+      finalText = "$text\n\n[Attached File: $_attachedFileName]\n$currentFileText";
+    }
 
     setState(() {
       _current = s;
       if (s.messages.isEmpty) s.title = text.isNotEmpty ? (text.length > 40 ? '${text.substring(0, 40)}…' : text) : 'Image Analysis';
-      s.messages.add(ChatMessage(role: 'user', text: text, imageBase64: currentImage));
+      s.messages.add(ChatMessage(role: 'user', text: finalText, imageBase64: currentImage));
       s.updated = DateTime.now();
       _busy = true;
       _selectedImageBase64 = null; // Clear image preview
+      _attachedFileName = null;
+      _attachedFileText = null;
     });
     
     _input.clear();
@@ -189,6 +219,21 @@ class _ChatPageState extends State<ChatPage> {
           ),
           if (_busy) const _ThinkingPill(),
           
+          // File Attachment Chip
+          if (_attachedFileName != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              alignment: Alignment.centerLeft,
+              child: Chip(
+                avatar: const Icon(Icons.insert_drive_file, size: 16),
+                label: Text(_attachedFileName!, style: const TextStyle(fontSize: 12)),
+                onDeleted: () => setState(() {
+                  _attachedFileName = null;
+                  _attachedFileText = null;
+                }),
+              ),
+            ),
+
           // Image Preview Area
           if (_selectedImageBase64 != null)
             Container(
@@ -219,7 +264,9 @@ class _ChatPageState extends State<ChatPage> {
             busy: _busy,
             onSend: () => _send(),
             onPickImage: _pickImage,
+            onPickFile: _pickFile,
             hasImage: _selectedImageBase64 != null,
+            hasFile: _attachedFileName != null,
           ),
         ]),
       ),
@@ -473,12 +520,14 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _InputBar extends StatelessWidget {
-  const _InputBar({required this.controller, required this.busy, required this.onSend, required this.onPickImage, required this.hasImage});
+  const _InputBar({required this.controller, required this.busy, required this.onSend, required this.onPickImage, required this.onPickFile, required this.hasImage, required this.hasFile});
   final TextEditingController controller;
   final bool busy;
   final VoidCallback onSend;
   final VoidCallback onPickImage;
+  final VoidCallback onPickFile;
   final bool hasImage;
+  final bool hasFile;
 
   @override
   Widget build(BuildContext context) {
@@ -496,6 +545,10 @@ class _InputBar extends StatelessWidget {
           IconButton(
             icon: Icon(Icons.add_photo_alternate_outlined, color: hasImage ? cs.primary : cs.onSurfaceVariant),
             onPressed: onPickImage,
+          ),
+          IconButton(
+            icon: Icon(Icons.attach_file, color: hasFile ? cs.primary : cs.onSurfaceVariant),
+            onPressed: onPickFile,
           ),
           Expanded(
             child: TextField(
