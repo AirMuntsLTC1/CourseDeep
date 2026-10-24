@@ -9,13 +9,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  GRADLE_OPTS: "-Dorg.gradle.parallel=true -Dorg.gradle.caching=true -Dorg.gradle.configureondemand=true"
-
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -27,11 +24,22 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Flutter (latest stable, SDK cached)
+      - name: Setup Flutter (stable)
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+
+      - name: Create Android folder if missing
+        working-directory: app
+        run: |
+          if [ ! -d android ]; then
+            echo "android/ folder not found in repo - generating it"
+            flutter create --platforms=android --project-name coursedeep --org com.coursedeep .
+          fi
+
+      - name: Show Flutter version
+        run: flutter --version
 
       - name: Cache pub packages
         uses: actions/cache@v4
@@ -40,23 +48,11 @@ jobs:
           key: pub-${{ runner.os }}-${{ hashFiles('app/pubspec.lock') }}
           restore-keys: pub-${{ runner.os }}-
 
-      - name: Cache Gradle caches + wrapper
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-v3-${{ runner.os }}-${{ hashFiles('app/android/gradle/wrapper/gradle-wrapper.properties', 'app/android/**/*.gradle*', 'app/android/**/build.gradle*') }}
-          restore-keys: gradle-${{ runner.os }}-
-
       - name: flutter pub get
         working-directory: app
         run: flutter pub get
 
-      - name: Precache Android artifacts
-        run: flutter precache --android
-
-      - name: Build arm64-only, obfuscated, minified release APK
+      - name: Build arm64-only, obfuscated, release APK
         working-directory: app
         run: |
           flutter build apk \
@@ -64,16 +60,12 @@ jobs:
             --target-platform android-arm64 \
             --split-per-abi \
             --obfuscate \
-            --split-debug-info=build/debug-info \
-            --tree-shake-icons
+            --split-debug-info=build/debug-info
 
       - name: Report APK sizes
         working-directory: app
         run: |
-          echo "=== APK output ==="
           ls -lh build/app/outputs/flutter-apk/
-          echo ""
-          echo "=== Size table ==="
           for f in build/app/outputs/flutter-apk/*.apk; do
             [ -f "$f" ] && printf "%-45s %s\n" "$(basename "$f")" "$(du -h "$f" | cut -f1)"
           done
