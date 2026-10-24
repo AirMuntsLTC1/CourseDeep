@@ -11,3 +11,7 @@ native/*.o
 build/
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Android machine-specific
+android/local.properties
+app/android/local.properties
