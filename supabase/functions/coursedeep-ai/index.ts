@@ -56,7 +56,11 @@ serve(async (req) => {
     const finalRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'openai/gpt-oss-120b', messages: finalMessages }),
+      body: JSON.stringify({ 
+        model: 'openai/gpt-oss-120b', 
+        messages: finalMessages,
+        max_tokens: 8192
+      }),
     })
     const finalData = await finalRes.json()
     const reply = finalData.choices[0].message.content

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../models/chat_message.dart';
 import '../services/ai_service.dart';
 import '../services/chat_store.dart';
@@ -287,9 +288,17 @@ class _Bubble extends StatelessWidget {
           bottomRight: Radius.circular(isUser ? 4 : 18),
         ),
       ),
-      child: SelectableText(
-        msg.text,
-        style: TextStyle(color: fg, height: 1.4, fontSize: 15),
+      child: MarkdownBody(
+        data: msg.text,
+        selectable: true,
+        styleSheet: MarkdownStyleSheet(
+          p: TextStyle(color: fg, height: 1.4, fontSize: 15),
+          code: TextStyle(backgroundColor: cs.surface, color: cs.primary, fontFamily: 'monospace'),
+          codeblockDecoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
       ),
     );
 

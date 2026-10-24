@@ -26,7 +26,7 @@ class AiService {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'messages': payload}),
           )
-          .timeout(const Duration(seconds: 90));
+          .timeout(const Duration(seconds: 120));
     } catch (_) {
       throw AiException(
           'Could not reach the CourseDeep server. Check your internet connection.');
