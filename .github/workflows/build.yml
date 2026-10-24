@@ -44,7 +44,7 @@ jobs:
         working-directory: app
         run: flutter pub get
 
-      - name: Upgrade Android Gradle Plugin and Gradle
+      - name: Upgrade Android Gradle Plugin, Gradle, name, and permissions
         working-directory: app/android
         run: |
           python3 - << 'PY'
@@ -52,8 +52,9 @@ jobs:
 
           AGP = "8.11.1"
           GRADLE = "8.14"
+          APP_NAME = "CourseDeep"
 
-          # 1. Bump Android Gradle Plugin (Groovy or Kotlin DSL, both styles)
+          # 1. Bump Android Gradle Plugin (Groovy or Kotlin DSL)
           for f in glob.glob("*.gradle*") + glob.glob("app/*.gradle*"):
               s = open(f).read()
               n = re.sub(r'(com\.android\.application["\']\)?\s*version\s*["\'])[0-9.]+',
@@ -64,7 +65,7 @@ jobs:
                   open(f, "w").write(n)
                   print("Updated AGP in", f)
 
-          # 2. Bump Gradle wrapper (AGP 8.11 needs Gradle 8.13+)
+          # 2. Bump Gradle wrapper
           p = "gradle/wrapper/gradle-wrapper.properties"
           if os.path.exists(p):
               s = open(p).read()
@@ -73,16 +74,17 @@ jobs:
                   open(p, "w").write(n)
                   print("Updated Gradle wrapper")
 
-          # 3. Make sure the app can reach the internet (needed for the AI proxy)
+          # 3. Manifest: app name shown on the phone + internet permission
           m = "app/src/main/AndroidManifest.xml"
           if os.path.exists(m):
               s = open(m).read()
+              s = re.sub(r'android:label="[^"]*"', 'android:label="' + APP_NAME + '"', s, count=1)
               if "android.permission.INTERNET" not in s:
                   s = re.sub(r'(<manifest[^>]*>)',
                              r'\1\n    <uses-permission android:name="android.permission.INTERNET" />',
                              s, count=1)
-                  open(m, "w").write(s)
-                  print("Added INTERNET permission")
+              open(m, "w").write(s)
+              print("Manifest set to", APP_NAME)
           PY
 
       - name: Build arm64-only, obfuscated, release APK
