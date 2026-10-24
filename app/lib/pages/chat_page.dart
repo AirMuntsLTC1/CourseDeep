@@ -155,15 +155,12 @@ class _ChatPageState extends State<ChatPage> {
     final currentFileText = _attachedFileText;
     
     // Combine typed text with the file content
-    String finalText = text;
-    if (currentFileText != null) {
-      finalText = "$text\n\n[Attached File: $_attachedFileName]\n$currentFileText";
-    }
+
 
     setState(() {
       _current = s;
       if (s.messages.isEmpty) s.title = text.isNotEmpty ? (text.length > 40 ? '${text.substring(0, 40)}…' : text) : 'Image Analysis';
-      s.messages.add(ChatMessage(role: 'user', text: finalText, imageBase64: currentImage));
+      s.messages.add(ChatMessage(role: 'user', text: text, imageBase64: currentImage, fileName: _attachedFileName, fileText: currentFileText));
       s.updated = DateTime.now();
       _busy = true;
       _selectedImageBase64 = null; // Clear image preview
@@ -400,6 +397,16 @@ class _MessageRow extends StatelessWidget {
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
                               child: Image.memory(base64Decode(msg.imageBase64!), width: 200),
+                            ),
+                          ),
+                        if (msg.fileName != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Chip(
+                              avatar: const Icon(Icons.insert_drive_file, size: 16),
+                              label: Text(msg.fileName!, style: const TextStyle(fontSize: 12)),
+                              backgroundColor: cs.surfaceContainerHighest,
+                              side: BorderSide.none,
                             ),
                           ),
                         if (msg.text.isNotEmpty)

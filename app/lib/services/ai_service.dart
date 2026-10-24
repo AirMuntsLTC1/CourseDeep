@@ -27,7 +27,13 @@ class AiService {
     final recentHistory = history.length > 10 ? history.sublist(history.length - 10) : history;
     final payload = recentHistory
         .where((m) => m.isUser || m.role == 'assistant')
-        .map((m) => {'role': m.role, 'content': m.text, 'image': m.imageBase64})
+        .map((m) {
+          String content = m.text;
+          if (m.fileText != null) {
+            content = "$content\n\n[Attached File: ${m.fileName}]\n${m.fileText}";
+          }
+          return {'role': m.role, 'content': content, 'image': m.imageBase64};
+        })
         .toList();
 
     http.Response response;
@@ -61,7 +67,7 @@ class AiService {
 
     final data = _parse(response.body);
     if (data == null) {
-      throw AiException('Server sent an unexpected response (HTTP ${response.statusCode}).');
+      throw AiException('Server sent an unexpected response (HTTP ${response.statusCode}).\nBody: ${response.body}');
     }
     if (response.statusCode != 200 || data['error'] != null) {
       throw AiException(data['error']?.toString() ?? 'Server error (HTTP ${response.statusCode}).');

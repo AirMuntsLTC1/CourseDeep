@@ -40,6 +40,11 @@ jobs:
           key: pub-${{ runner.os }}-${{ hashFiles('app/pubspec.lock') }}
           restore-keys: pub-${{ runner.os }}-
 
+      - name: Compile C++ Native Library
+        run: |
+          mkdir -p app/android/app/src/main/jniLibs/arm64-v8a
+          clang++ -shared -fPIC native/coursedeep.cpp -o app/android/app/src/main/jniLibs/arm64-v8a/libcoursedeep.so
+
       - name: flutter pub get
         working-directory: app
         run: flutter pub get

@@ -6,11 +6,13 @@ class Source {
 }
 
 class ChatMessage {
-  ChatMessage({required this.role, required this.text, this.sources = const [], this.imageBase64, DateTime? time})
+  ChatMessage({required this.role, required this.text, this.sources = const [], this.imageBase64, this.fileName, this.fileText, DateTime? time})
       : time = time ?? DateTime.now();
 
   final List<Source> sources;
   final String? imageBase64;
+  final String? fileName;
+  final String? fileText;
 
   /// 'user', 'assistant' or 'error'
   final String role;
@@ -26,6 +28,8 @@ class ChatMessage {
         'time': time.toIso8601String(),
         'sources': sources.map((s) => {'title': s.title, 'url': s.url}).toList(),
         'imageBase64': imageBase64,
+        'fileName': fileName,
+        'fileText': fileText,
       };
 
   factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
@@ -34,6 +38,8 @@ class ChatMessage {
         time: DateTime.tryParse(j['time'] as String? ?? '') ?? DateTime.now(),
         sources: (j['sources'] as List? ?? []).map((e) => Source.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
         imageBase64: j['imageBase64'] as String?,
+        fileName: j['fileName'] as String?,
+        fileText: j['fileText'] as String?,
       );
 }
 
