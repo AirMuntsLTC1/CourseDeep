@@ -11,22 +11,26 @@ class AiException implements Exception {
 }
 
 class AiService {
+  // Reuse connection for faster requests
+  static final http.Client _client = http.Client();
+
   /// Sends the whole conversation so the AI remembers context.
   Future<Map<String, dynamic>> send(List<ChatMessage> history) async {
-    final payload = history
+    final recentHistory = history.length > 10 ? history.sublist(history.length - 10) : history;
+    final payload = recentHistory
         .where((m) => m.isUser || m.role == 'assistant')
         .map((m) => {'role': m.role, 'content': m.text})
         .toList();
 
     http.Response response;
     try {
-      response = await http
+      response = await _client
           .post(
             Uri.parse(kBackendUrl),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'messages': payload}),
           )
-          .timeout(const Duration(seconds: 120));
+          .timeout(const Duration(seconds: 20));
     } catch (_) {
       throw AiException(
           'Could not reach the CourseDeep server. Check your internet connection.');

@@ -1,7 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'config.dart';
 import 'pages/chat_page.dart';
 
-void main() => runApp(const CourseDeepApp());
+
+void _preWarmBackend() async {
+  try {
+    // Send a tiny dummy request to wake up the Supabase Edge Function
+    await http.post(
+      Uri.parse(kBackendUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'messages': [{'role': 'user', 'content': 'ping'}]}),
+    ).timeout(const Duration(seconds: 5));
+  } catch (_) {
+    // Ignore errors, this is just to warm up the server
+  }
+}
+
+void main() {
+  _preWarmBackend(); // Fire and forget
+  runApp(const CourseDeepApp());
+}
+
 
 class CourseDeepApp extends StatefulWidget {
   const CourseDeepApp({super.key});
