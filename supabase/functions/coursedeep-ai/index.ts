@@ -119,7 +119,7 @@ serve(async (req) => {
         } catch (e) { debugLog.push("Tavily timeout") }
       }
 
-      let systemPrompt = 'You are an expert programmer and AI assistant. Today is October 2026. You MUST provide complete, functional code. DO NOT truncate code blocks. If the code is long, write it entirely. Use detailed explanations.';
+      let systemPrompt = 'You are a Senior Principal Software Engineer. Your goal is to provide ENTERPRISE-GRADE, FULLY FUNCTIONAL code. NEVER summarize code with comments like "// rest of the code here". Write out EVERY SINGLE LINE. If the user asks for a backend, include all headers, main functions, error handling, and build files. Do NOT stop until the entire architecture is complete and ready to compile.';
       if (context) systemPrompt = `You are CourseDeep. Use this search context to answer concisely:\n\n${context}`;
 
       // TEXT 1: Groq
