@@ -503,6 +503,50 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+
+  void _showSettings() {
+    final pal = Pal.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text('Settings', style: TextStyle(color: pal.text, fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+            ListTile(
+              leading: Icon(Icons.cleaning_services_outlined, color: pal.text),
+              title: Text('Clear all chats', style: TextStyle(color: pal.text)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _clearAllChats();
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.info_outline, color: pal.text),
+              title: Text('About CourseDeep', style: TextStyle(color: pal.text)),
+              subtitle: Text('Version 2.0.0 — 11 AI Fallbacks', style: TextStyle(color: pal.dim)),
+              onTap: () => Navigator.pop(ctx),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _clearAllChats() {
+    setState(() {
+      _sessions.clear();
+      _current = null;
+    });
+    _store.clear();
+    _toast('All chats cleared');
+  }
+
   // ───────────────────────── build ─────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -709,10 +753,28 @@ class _ChatPageState extends State<ChatPage> {
                   ),
           ),
           Divider(height: 1, color: pal.border),
-          ListTile(
-            leading: Icon(widget.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: pal.text),
-            title: Text(widget.isDark ? 'Light mode' : 'Dark mode', style: TextStyle(color: pal.text)),
-            onTap: widget.onToggleTheme,
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    leading: Icon(widget.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: pal.text),
+                    title: Text(widget.isDark ? 'Light mode' : 'Dark mode', style: TextStyle(color: pal.text)),
+                    onTap: widget.onToggleTheme,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Settings',
+                  icon: Icon(Icons.settings_outlined, color: pal.text),
+                  onPressed: () {
+                    Navigator.pop(context); // Close drawer first
+                    _showSettings();
+                  },
+                ),
+              ],
+            ),
           ),
         ]),
       ),

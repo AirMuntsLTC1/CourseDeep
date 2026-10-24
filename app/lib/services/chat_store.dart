@@ -113,6 +113,18 @@ class ChatStore {
     if (await f.exists()) await f.delete();
   }
 
+  /// Deletes ALL chats and their files.
+  Future<void> clear() async {
+    _timers.forEach((_, t) => t.cancel());
+    _timers.clear();
+    final d = await _dir();
+    for (final f in d.listSync().whereType<File>()) {
+      if (f.path.endsWith('.json')) {
+        try { await f.delete(); } catch (_) {}
+      }
+    }
+  }
+
   /// Deletes the stored copies of a chat's images/files (call after Undo expired).
   Future<void> purgeAttachments(ChatSession s) async {
     for (final m in s.messages) {

@@ -283,7 +283,7 @@ class _AssistantBlock extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 4, bottom: 6),
                 child: FilledButton.tonalIcon(
                   onPressed: () => actions.shareZip(files),
-                  icon: const Icon(Icons.folder_zip_outlined, size: 18),
+                  icon: const Icon(Icons.download_rounded, size: 18),
                   label: Text('Download all ${files.length} files as ZIP'),
                 ),
               ),
@@ -534,7 +534,7 @@ class GeneratedFileCard extends StatelessWidget {
         if (file.done) ...[
           IconButton(tooltip: 'Preview', visualDensity: VisualDensity.compact, onPressed: () => actions.previewFile(file), icon: Icon(Icons.visibility_outlined, size: 20, color: pal.dim)),
           IconButton(tooltip: 'Copy', visualDensity: VisualDensity.compact, onPressed: () => actions.copy(file.content), icon: Icon(Icons.content_copy_rounded, size: 19, color: pal.dim)),
-          IconButton.filledTonal(tooltip: 'Save / share', visualDensity: VisualDensity.compact, onPressed: () => actions.shareFile(file), icon: const Icon(Icons.ios_share_rounded, size: 19)),
+          IconButton.filledTonal(tooltip: 'Download', visualDensity: VisualDensity.compact, onPressed: () => actions.shareFile(file), icon: const Icon(Icons.download_rounded, size: 19)),
         ],
       ]),
     );

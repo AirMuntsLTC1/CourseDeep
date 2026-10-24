@@ -201,17 +201,17 @@ function candidate(p: Provider, system: string, all: Msg[]): Cand {
       if (p.kind === 'gemini') {
         res = await fetch(p.url, {
           method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': p.key },
-          body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: geminiContents(msgs), generationConfig: { maxOutputTokens: 4096 } }),
+          body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: geminiContents(msgs), generationConfig: { maxOutputTokens: 5000 } }),
         })
       } else if (p.kind === 'cf') {
         res = await fetch(p.url, {
           method: 'POST', signal, headers: { Authorization: `Bearer ${p.key}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stream: true, max_tokens: 1500, messages: openaiMsgs(p, system, msgs) }),
+          body: JSON.stringify({ stream: true, max_tokens: 5000, messages: openaiMsgs(p, system, msgs) }),
         })
       } else {
         res = await fetch(p.url, {
           method: 'POST', signal, headers: { Authorization: `Bearer ${p.key}`, 'Content-Type': 'application/json', ...(p.headers ?? {}) },
-          body: JSON.stringify({ model: p.model, stream: true, max_tokens: 4096, messages: openaiMsgs(p, system, msgs) }),
+          body: JSON.stringify({ model: p.model, stream: true, max_tokens: 5000, messages: openaiMsgs(p, system, msgs) }),
         })
       }
       if (!res.ok) throw new HttpErr(res.status, (await res.text().catch(() => '')).slice(0, 160))
