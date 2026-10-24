@@ -46,7 +46,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('app/android/gradle/wrapper/gradle-wrapper.properties', 'app/android/**/*.gradle*', 'app/android/**/build.gradle*') }}
+          key: gradle-v3-${{ runner.os }}-${{ hashFiles('app/android/gradle/wrapper/gradle-wrapper.properties', 'app/android/**/*.gradle*', 'app/android/**/build.gradle*') }}
           restore-keys: gradle-${{ runner.os }}-
 
       - name: flutter pub get
