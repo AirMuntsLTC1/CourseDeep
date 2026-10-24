@@ -50,7 +50,7 @@ serve(async (req) => {
         try {
           const res = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent`, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
-            body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: userQuery }, { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } }] }], generationConfig: { maxOutputTokens: 2048 } }),
+            body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: userQuery }, { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } }] }], generationConfig: { maxOutputTokens: 8192 } }),
           }, 30000) // 30s for images
           const data = await res.json()
           if (res.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) { reply = data.candidates[0].content.parts[0].text; providerUsed = "Gemini Vision"; }
@@ -63,7 +63,7 @@ serve(async (req) => {
         try {
           const res = await fetchWithTimeout('https://api.mistral.ai/v1/chat/completions', {
             method: 'POST', headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'pixtral-12b-2409', messages: [{ role: 'user', content: [{ type: 'text', text: userQuery }, { type: 'image_url', image_url: `data:image/jpeg;base64,${imageBase64}` }] }], max_tokens: 2048 }),
+            body: JSON.stringify({ model: 'pixtral-12b-2409', messages: [{ role: 'user', content: [{ type: 'text', text: userQuery }, { type: 'image_url', image_url: `data:image/jpeg;base64,${imageBase64}` }] }], max_tokens: 8192 }),
           }, 30000)
           const data = await res.json()
           if (res.ok && data.choices?.[0]?.message?.content) { reply = data.choices[0].message.content; providerUsed = "Mistral Vision"; }
@@ -119,7 +119,7 @@ serve(async (req) => {
         } catch (e) { debugLog.push("Tavily timeout") }
       }
 
-      let systemPrompt = 'You are CourseDeep, a helpful AI assistant. Today is October 2026. Keep answers concise.';
+      let systemPrompt = 'You are an expert programmer and AI assistant. Today is October 2026. You MUST provide complete, functional code. DO NOT truncate code blocks. If the code is long, write it entirely. Use detailed explanations.';
       if (context) systemPrompt = `You are CourseDeep. Use this search context to answer concisely:\n\n${context}`;
 
       // TEXT 1: Groq
@@ -127,8 +127,8 @@ serve(async (req) => {
         try {
           const res = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST', headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'openai/gpt-oss-120b', messages: [{ role: 'system', content: systemPrompt }, ...recentMessages], max_tokens: 2048 }),
-          }, 8000)
+            body: JSON.stringify({ model: 'openai/gpt-oss-120b', messages: [{ role: 'system', content: systemPrompt }, ...recentMessages], max_tokens: 8192 }),
+          }, 30000)
           const data = await res.json()
           if (res.ok && data.choices?.[0]?.message?.content) { reply = data.choices[0].message.content; providerUsed = "Groq"; }
           else { debugLog.push("Groq failed") }
@@ -140,8 +140,8 @@ serve(async (req) => {
         try {
           const res = await fetchWithTimeout('https://api.deepseek.com/chat/completions', {
             method: 'POST', headers: { 'Authorization': `Bearer ${DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'system', content: systemPrompt }, ...recentMessages], max_tokens: 2048 }),
-          }, 8000)
+            body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'system', content: systemPrompt }, ...recentMessages], max_tokens: 8192 }),
+          }, 30000)
           const data = await res.json()
           if (res.ok && data.choices?.[0]?.message?.content) { reply = data.choices[0].message.content; providerUsed = "DeepSeek"; }
           else { debugLog.push("DeepSeek failed") }
@@ -154,8 +154,8 @@ serve(async (req) => {
           const geminiContents = recentMessages.map((m: any) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
           const res = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent`, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
-            body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents: geminiContents, generationConfig: { maxOutputTokens: 2048 } }),
-          }, 8000)
+            body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents: geminiContents, generationConfig: { maxOutputTokens: 8192 } }),
+          }, 30000)
           const data = await res.json()
           if (res.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) { reply = data.candidates[0].content.parts[0].text; providerUsed = "Gemini"; }
           else { debugLog.push("Gemini failed") }
@@ -167,8 +167,8 @@ serve(async (req) => {
         try {
           const res = await fetchWithTimeout('https://integrate.api.nvidia.com/v1/chat/completions', {
             method: 'POST', headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'meta/llama-3.1-70b-instruct', messages: [{ role: 'system', content: systemPrompt }, ...recentMessages], max_tokens: 2048 }),
-          }, 8000)
+            body: JSON.stringify({ model: 'meta/llama-3.1-70b-instruct', messages: [{ role: 'system', content: systemPrompt }, ...recentMessages], max_tokens: 8192 }),
+          }, 30000)
           const data = await res.json()
           if (res.ok && data.choices?.[0]?.message?.content) { reply = data.choices[0].message.content; providerUsed = "NVIDIA NIM"; }
           else { debugLog.push("NVIDIA failed") }
@@ -180,8 +180,8 @@ serve(async (req) => {
         try {
           const res = await fetchWithTimeout('https://api.sambanova.ai/v1/chat/completions', {
             method: 'POST', headers: { 'Authorization': `Bearer ${SAMBANOVA_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'Meta-Llama-3.3-70B-Instruct', messages: [{ role: 'system', content: systemPrompt }, ...recentMessages], max_tokens: 2048 }),
-          }, 8000)
+            body: JSON.stringify({ model: 'Meta-Llama-3.3-70B-Instruct', messages: [{ role: 'system', content: systemPrompt }, ...recentMessages], max_tokens: 8192 }),
+          }, 30000)
           const data = await res.json()
           if (res.ok && data.choices?.[0]?.message?.content) { reply = data.choices[0].message.content; providerUsed = "SambaNova"; }
           else { debugLog.push("SambaNova failed") }
@@ -193,8 +193,8 @@ serve(async (req) => {
         try {
           const res = await fetchWithTimeout('https://api.mistral.ai/v1/chat/completions', {
             method: 'POST', headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'open-mistral-7b', messages: [{ role: 'system', content: systemPrompt }, ...recentMessages], max_tokens: 2048 }),
-          }, 8000)
+            body: JSON.stringify({ model: 'open-mistral-7b', messages: [{ role: 'system', content: systemPrompt }, ...recentMessages], max_tokens: 8192 }),
+          }, 30000)
           const data = await res.json()
           if (res.ok && data.choices?.[0]?.message?.content) { reply = data.choices[0].message.content; providerUsed = "Mistral"; }
           else { debugLog.push("Mistral failed") }
@@ -207,7 +207,7 @@ serve(async (req) => {
           const res = await fetchWithTimeout(`https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.1-8b-instruct`, {
             method: 'POST', headers: { 'Authorization': `Bearer ${CF_API_TOKEN}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ messages: [{ role: 'system', content: systemPrompt }, ...recentMessages] }),
-          }, 8000)
+          }, 30000)
           const data = await res.json()
           if (res.ok && data.result?.response) { reply = data.result.response; providerUsed = "Cloudflare"; }
           else { debugLog.push("Cloudflare failed") }
@@ -222,8 +222,8 @@ serve(async (req) => {
               'Authorization': `Bearer ${OPENROUTER_API_KEY}`, 'Content-Type': 'application/json',
               'HTTP-Referer': 'https://coursedeep.app', 'X-Title': 'CourseDeep'
             },
-            body: JSON.stringify({ model: 'meta-llama/llama-3.1-8b-instruct:free', messages: [{ role: 'system', content: systemPrompt }, ...recentMessages], max_tokens: 2048 }),
-          }, 8000)
+            body: JSON.stringify({ model: 'meta-llama/llama-3.1-8b-instruct:free', messages: [{ role: 'system', content: systemPrompt }, ...recentMessages], max_tokens: 8192 }),
+          }, 30000)
           const data = await res.json()
           if (res.ok && data.choices?.[0]?.message?.content) { reply = data.choices[0].message.content; providerUsed = "OpenRouter"; }
           else { debugLog.push("OpenRouter failed") }
@@ -236,7 +236,7 @@ serve(async (req) => {
           const res = await fetchWithTimeout('https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2', {
             method: 'POST', headers: { 'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ inputs: `${systemPrompt}\n\nUser: ${userQuery}\nAssistant:` }),
-          }, 8000)
+          }, 30000)
           const data = await res.json()
           if (res.ok && data[0]?.generated_text) { reply = data[0].generated_text; providerUsed = "HuggingFace"; }
           else { debugLog.push("HuggingFace failed") }
