@@ -5,7 +5,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:archive/archive.dart';
 import '../models/chat_message.dart';
 import '../services/ai_service.dart';
 import '../services/chat_store.dart';
@@ -88,18 +88,53 @@ class _ChatPageState extends State<ChatPage> {
   String? _attachedFileName;
   String? _attachedFileText;
 
+  bool _isTextFile(String name) {
+    final ext = name.split('.').last.toLowerCase();
+    return ['txt', 'md', 'dart', 'py', 'js', 'html', 'css', 'json', 'csv', 'cpp', 'c', 'java', 'ts', 'rs', 'go', 'php', 'sh', 'yaml', 'yml', 'xml'].contains(ext);
+  }
+
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['txt', 'md', 'dart', 'py', 'js', 'html', 'css', 'json', 'csv', 'cpp', 'c', 'java'],
-    );
-    if (result != null && result.files.single.path != null) {
-      final file = File(result.files.single.path!);
-      final text = await file.readAsString();
-      setState(() {
-        _attachedFileName = result.files.single.name;
-        _attachedFileText = text;
-      });
+    final List<PlatformFile> result = await FilePicker.pickFiles(type: FileType.any);
+    if (result.isNotEmpty && result.first.path != null) {
+      final file = File(result.first.path!);
+      final fileName = result.first.name;
+
+      if (fileName.toLowerCase().endsWith('.zip')) {
+        // Extract text from ZIP files
+        final bytes = await file.readAsBytes();
+        final archive = ZipDecoder().decodeBytes(bytes);
+        final buffer = StringBuffer();
+        buffer.writeln("[ZIP File Contents: $fileName]");
+        int count = 0;
+        for (final entry in archive.files) {
+          if (entry.isFile && _isTextFile(entry.name)) {
+            try {
+              final content = utf8.decode(entry.content);
+              buffer.writeln("\n--- File: ${entry.name} ---\n$content\n");
+              count++;
+            } catch (_) {}
+          }
+        }
+        if (count == 0) buffer.writeln("No readable text/code files found in this ZIP.");
+        
+        setState(() {
+          _attachedFileName = fileName;
+          _attachedFileText = buffer.toString();
+        });
+      } else if (_isTextFile(fileName)) {
+        // Read standard text files
+        final text = await file.readAsString();
+        setState(() {
+          _attachedFileName = fileName;
+          _attachedFileText = text;
+        });
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Only text/code or ZIP files are supported. Use the image button for photos.')),
+          );
+        }
+      }
     }
   }
 
@@ -214,7 +249,10 @@ class _ChatPageState extends State<ChatPage> {
                         controller: _scroll,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         itemCount: messages.length,
-                        itemBuilder: (_, i) => _MessageRow(msg: messages[i], onCopy: () => _copy(messages[i].text), onOpenLink: _openLink),
+                        scrollCacheExtent: 1000, // Improves scrolling performance
+                        itemBuilder: (_, i) => RepaintBoundary(
+                          child: _MessageRow(msg: messages[i], onCopy: () => _copy(messages[i].text), onOpenLink: _openLink),
+                        ),
                       ),
           ),
           if (_busy) const _ThinkingPill(),
