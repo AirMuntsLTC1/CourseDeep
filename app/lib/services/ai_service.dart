@@ -27,7 +27,7 @@ class AiService {
     final recentHistory = history.length > 10 ? history.sublist(history.length - 10) : history;
     final payload = recentHistory
         .where((m) => m.isUser || m.role == 'assistant')
-        .map((m) => {'role': m.role, 'content': m.text})
+        .map((m) => {'role': m.role, 'content': m.text, 'image': m.imageBase64})
         .toList();
 
     http.Response response;

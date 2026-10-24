@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/chat_message.dart';
 import '../services/ai_service.dart';
 import '../services/chat_store.dart';
@@ -21,11 +24,13 @@ class _ChatPageState extends State<ChatPage> {
   final _ai = AiService();
   final _input = TextEditingController();
   final _scroll = ScrollController();
+  final _picker = ImagePicker();
 
   List<ChatSession> _sessions = [];
   ChatSession? _current;
   bool _busy = false;
   bool _loaded = false;
+  String? _selectedImageBase64;
 
   @override
   void initState() {
@@ -51,10 +56,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   ChatSession _createSession() {
-    final s = ChatSession(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      title: 'New chat',
-    );
+    final s = ChatSession(id: DateTime.now().microsecondsSinceEpoch.toString(), title: 'New chat');
     _sessions.insert(0, s);
     return s;
   }
@@ -73,29 +75,37 @@ class _ChatPageState extends State<ChatPage> {
   void _deleteChat(ChatSession s) {
     setState(() {
       _sessions.remove(s);
-      if (_current == s) {
-        _current = _sessions.isNotEmpty ? _sessions.first : null;
-      }
+      if (_current == s) _current = _sessions.isNotEmpty ? _sessions.first : null;
     });
     _persist();
   }
 
   Future<void> _persist() => _store.save(_sessions);
 
+  Future<void> _pickImage() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 1024, imageQuality: 80);
+    if (image != null) {
+      final bytes = await image.readAsBytes();
+      setState(() => _selectedImageBase64 = base64Encode(bytes));
+    }
+  }
+
   Future<void> _send([String? preset]) async {
     final text = (preset ?? _input.text).trim();
-    if (text.isEmpty || _busy) return;
+    if ((text.isEmpty && _selectedImageBase64 == null) || _busy) return;
 
     final s = _current ?? _createSession();
+    final currentImage = _selectedImageBase64;
+
     setState(() {
       _current = s;
-      if (s.messages.isEmpty) {
-        s.title = text.length > 40 ? '${text.substring(0, 40)}…' : text;
-      }
-      s.messages.add(ChatMessage(role: 'user', text: text));
+      if (s.messages.isEmpty) s.title = text.isNotEmpty ? (text.length > 40 ? '${text.substring(0, 40)}…' : text) : 'Image Analysis';
+      s.messages.add(ChatMessage(role: 'user', text: text, imageBase64: currentImage));
       s.updated = DateTime.now();
       _busy = true;
+      _selectedImageBase64 = null; // Clear image preview
     });
+    
     _input.clear();
     _scrollToEnd();
 
@@ -105,9 +115,7 @@ class _ChatPageState extends State<ChatPage> {
       reply = ChatMessage(
         role: 'assistant',
         text: result['reply'],
-        sources: (result['sources'] as List)
-            .map((e) => Source.fromJson(Map<String, dynamic>.from(e)))
-            .toList(),
+        sources: (result['sources'] as List).map((e) => Source.fromJson(Map<String, dynamic>.from(e))).toList(),
       );
     } on AiException catch (e) {
       reply = ChatMessage(role: 'error', text: e.message);
@@ -129,36 +137,22 @@ class _ChatPageState extends State<ChatPage> {
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
-        _scroll.animateTo(
-          _scroll.position.maxScrollExtent + 120,
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOutCubic,
-        );
+        _scroll.animateTo(_scroll.position.maxScrollExtent + 120, duration: const Duration(milliseconds: 350), curve: Curves.easeOutCubic);
       }
     });
   }
 
   void _openLink(String url) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => WebViewPage(url: url, title: 'CourseDeep Source'),
-      ),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewPage(url: url, title: 'CourseDeep Source')));
   }
 
   void _copy(String text) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Copied to clipboard'),
-      duration: Duration(seconds: 1),
-      behavior: SnackBarBehavior.floating,
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 1), behavior: SnackBarBehavior.floating));
   }
 
   @override
   Widget build(BuildContext context) {
-    // Claude-ish warm background
     final bgColor = widget.isDark ? const Color(0xFF1C1C1A) : const Color(0xFFFBFBF9);
     final cs = Theme.of(context).colorScheme;
     final messages = _current?.messages ?? const <ChatMessage>[];
@@ -175,16 +169,8 @@ class _ChatPageState extends State<ChatPage> {
           const Text('CourseDeep', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
         ]),
         actions: [
-          IconButton(
-            tooltip: 'New chat',
-            icon: const Icon(Icons.add_comment_outlined, size: 20),
-            onPressed: _newChat,
-          ),
-          IconButton(
-            tooltip: 'Toggle theme',
-            icon: Icon(widget.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, size: 20),
-            onPressed: widget.onToggleTheme,
-          ),
+          IconButton(icon: const Icon(Icons.add_comment_outlined, size: 20), onPressed: _newChat),
+          IconButton(icon: Icon(widget.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, size: 20), onPressed: widget.onToggleTheme),
         ],
       ),
       body: SafeArea(
@@ -198,18 +184,42 @@ class _ChatPageState extends State<ChatPage> {
                         controller: _scroll,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         itemCount: messages.length,
-                        itemBuilder: (_, i) => _MessageRow(
-                          msg: messages[i],
-                          onCopy: () => _copy(messages[i].text),
-                          onOpenLink: _openLink,
-                        ),
+                        itemBuilder: (_, i) => _MessageRow(msg: messages[i], onCopy: () => _copy(messages[i].text), onOpenLink: _openLink),
                       ),
           ),
           if (_busy) const _ThinkingPill(),
+          
+          // Image Preview Area
+          if (_selectedImageBase64 != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              alignment: Alignment.centerLeft,
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(base64Decode(_selectedImageBase64!), width: 60, height: 60, fit: BoxFit.cover),
+                  ),
+                  Positioned(
+                    top: 0, right: 0,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _selectedImageBase64 = null),
+                      child: Container(
+                        decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                        child: const Icon(Icons.close, size: 16, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           _InputBar(
             controller: _input,
             busy: _busy,
             onSend: () => _send(),
+            onPickImage: _pickImage,
+            hasImage: _selectedImageBase64 != null,
           ),
         ]),
       ),
@@ -232,11 +242,7 @@ class _ChatPageState extends State<ChatPage> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: FilledButton.icon(
-                onPressed: _newChat,
-                icon: const Icon(Icons.add),
-                label: const Text('New chat'),
-              ),
+              child: FilledButton.icon(onPressed: _newChat, icon: const Icon(Icons.add), label: const Text('New chat')),
             ),
             const SizedBox(height: 8),
             Expanded(
@@ -251,11 +257,7 @@ class _ChatPageState extends State<ChatPage> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           leading: const Icon(Icons.chat_bubble_outline, size: 18),
                           title: Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                          trailing: IconButton(
-                            tooltip: 'Delete chat',
-                            icon: const Icon(Icons.delete_outline, size: 18),
-                            onPressed: () => _deleteChat(s),
-                          ),
+                          trailing: IconButton(icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => _deleteChat(s)),
                           onTap: () => _selectChat(s),
                         );
                       },
@@ -279,8 +281,6 @@ class _MessageRow extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isUser = msg.isUser;
     final isErr = msg.isError;
-
-    // Font sizes tailored for Claude AI look (Bigger)
     const aiFontSize = 17.0;
     const userFontSize = 16.0;
 
@@ -291,20 +291,11 @@ class _MessageRow extends StatelessWidget {
         mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
           if (!isUser) ...[
-            // Claude-style Avatar
             Container(
               margin: const EdgeInsets.only(top: 4),
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: isErr ? cs.error : cs.primary.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isErr ? Icons.error_outline : Icons.auto_awesome,
-                size: 16,
-                color: isErr ? cs.onError : cs.primary,
-              ),
+              width: 28, height: 28,
+              decoration: BoxDecoration(color: isErr ? cs.error : cs.primary.withValues(alpha: 0.15), shape: BoxShape.circle),
+              child: Icon(isErr ? Icons.error_outline : Icons.auto_awesome, size: 16, color: isErr ? cs.onError : cs.primary),
             ),
             const SizedBox(width: 16),
           ],
@@ -313,30 +304,34 @@ class _MessageRow extends StatelessWidget {
               crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 if (isUser)
-                  // User gets a subtle rounded box
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      msg.text,
-                      style: TextStyle(color: cs.onSurface, fontSize: userFontSize, height: 1.4),
+                    decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(16)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (msg.imageBase64 != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.memory(base64Decode(msg.imageBase64!), width: 200),
+                            ),
+                          ),
+                        if (msg.text.isNotEmpty)
+                          Text(msg.text, style: TextStyle(color: cs.onSurface, fontSize: userFontSize, height: 1.4)),
+                      ],
                     ),
                   )
                 else
-                  // AI gets flat, readable text with Markdown
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Source Chips (Claude-style pills)
                       if (msg.sources.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
+                            spacing: 8, runSpacing: 8,
                             children: msg.sources.map((source) {
                               final domain = Uri.tryParse(source.url)?.host.replaceAll('www.', '') ?? 'Source';
                               return InkWell(
@@ -352,20 +347,9 @@ class _MessageRow extends StatelessWidget {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(2),
-                                        child: Image.network(
-                                          'https://www.google.com/s2/favicons?domain=$domain&sz=32',
-                                          width: 14,
-                                          height: 14,
-                                          errorBuilder: (_, __, ___) => Icon(Icons.language, size: 14, color: cs.primary),
-                                        ),
-                                      ),
+                                      ClipRRect(borderRadius: BorderRadius.circular(2), child: Image.network('https://www.google.com/s2/favicons?domain=$domain&sz=32', width: 14, height: 14, errorBuilder: (_, __, ___) => Icon(Icons.language, size: 14, color: cs.primary))),
                                       const SizedBox(width: 6),
-                                      Text(
-                                        domain,
-                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurfaceVariant),
-                                      ),
+                                      Text(domain, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurfaceVariant)),
                                     ],
                                   ),
                                 ),
@@ -373,14 +357,10 @@ class _MessageRow extends StatelessWidget {
                             }).toList(),
                           ),
                         ),
-
-                      // Markdown Text
                       MarkdownBody(
                         data: msg.text,
                         selectable: true,
-                        onTapLink: (text, href, title) {
-                          if (href != null) onOpenLink(href);
-                        },
+                        onTapLink: (text, href, title) { if (href != null) onOpenLink(href); },
                         styleSheet: MarkdownStyleSheet(
                           p: TextStyle(color: cs.onSurface, height: 1.6, fontSize: aiFontSize, letterSpacing: 0.1),
                           h1: TextStyle(color: cs.onSurface, fontSize: aiFontSize + 6, fontWeight: FontWeight.bold),
@@ -389,18 +369,10 @@ class _MessageRow extends StatelessWidget {
                           listBullet: TextStyle(color: cs.onSurface, fontSize: aiFontSize),
                           a: TextStyle(color: cs.primary, decoration: TextDecoration.underline),
                           code: TextStyle(backgroundColor: cs.surfaceContainerHighest, color: cs.primary, fontFamily: 'monospace', fontSize: aiFontSize - 2),
-                          codeblockDecoration: BoxDecoration(
-                            color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          blockquoteDecoration: BoxDecoration(
-                            color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-                            border: Border(left: BorderSide(color: cs.primary, width: 4)),
-                          ),
+                          codeblockDecoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(12)),
+                          blockquoteDecoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.3), border: Border(left: BorderSide(color: cs.primary, width: 4))),
                         ),
                       ),
-                      
-                      // Copy button (Claude style)
                       if (!isErr)
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
@@ -433,7 +405,6 @@ class _MessageRow extends StatelessWidget {
 
 class _ThinkingPill extends StatelessWidget {
   const _ThinkingPill();
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -443,23 +414,13 @@ class _ThinkingPill extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(20),
-          ),
+          decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(20)),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
-              ),
+              SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary)),
               const SizedBox(width: 10),
-              Text(
-                'CourseDeep is thinking...',
-                style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14, fontWeight: FontWeight.w500),
-              ),
+              Text('CourseDeep is thinking...', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14, fontWeight: FontWeight.w500)),
             ],
           ),
         ),
@@ -472,12 +433,7 @@ class _EmptyState extends StatelessWidget {
   const _EmptyState({required this.onPick});
   final ValueChanged<String> onPick;
 
-  static const _suggestions = [
-    'Explain photosynthesis simply',
-    'Help me make a study schedule',
-    'Write a short poem about the ocean',
-    'Summarize the causes of World War I',
-  ];
+  static const _suggestions = ['Explain photosynthesis simply', 'Help me make a study schedule', 'Write a short poem about the ocean', 'Summarize the causes of World War I'];
 
   @override
   Widget build(BuildContext context) {
@@ -489,21 +445,15 @@ class _EmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: cs.primary.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
+              width: 64, height: 64,
+              decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
               child: Icon(Icons.auto_awesome, color: cs.primary, size: 32),
             ),
             const SizedBox(height: 20),
             Text("How can I help you today?", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: cs.onSurface)),
             const SizedBox(height: 24),
             Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              alignment: WrapAlignment.center,
+              spacing: 10, runSpacing: 10, alignment: WrapAlignment.center,
               children: [
                 for (final s in _suggestions)
                   ActionChip(
@@ -523,10 +473,12 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _InputBar extends StatelessWidget {
-  const _InputBar({required this.controller, required this.busy, required this.onSend});
+  const _InputBar({required this.controller, required this.busy, required this.onSend, required this.onPickImage, required this.hasImage});
   final TextEditingController controller;
   final bool busy;
   final VoidCallback onSend;
+  final VoidCallback onPickImage;
+  final bool hasImage;
 
   @override
   Widget build(BuildContext context) {
@@ -534,26 +486,28 @@ class _InputBar extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 4, 6, 4),
+        padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
         decoration: BoxDecoration(
           color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
         ),
         child: Row(children: [
+          IconButton(
+            icon: Icon(Icons.add_photo_alternate_outlined, color: hasImage ? cs.primary : cs.onSurfaceVariant),
+            onPressed: onPickImage,
+          ),
           Expanded(
             child: TextField(
               controller: controller,
-              minLines: 1,
-              maxLines: 5,
+              minLines: 1, maxLines: 5,
               style: const TextStyle(fontSize: 16),
               textInputAction: TextInputAction.send,
               onSubmitted: (_) => onSend(),
               decoration: InputDecoration(
-                hintText: 'Reply to CourseDeep...',
+                hintText: hasImage ? 'Ask about this image...' : 'Reply to CourseDeep...',
                 hintStyle: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
-                border: InputBorder.none,
-                isDense: true,
+                border: InputBorder.none, isDense: true,
               ),
             ),
           ),
@@ -561,10 +515,7 @@ class _InputBar extends StatelessWidget {
             onPressed: busy ? null : onSend,
             icon: Container(
               width: 32, height: 32,
-              decoration: BoxDecoration(
-                color: busy ? cs.surfaceContainerHighest : cs.primary,
-                shape: BoxShape.circle,
-              ),
+              decoration: BoxDecoration(color: busy ? cs.surfaceContainerHighest : cs.primary, shape: BoxShape.circle),
               child: Icon(Icons.arrow_upward, size: 18, color: busy ? cs.onSurfaceVariant : cs.onPrimary),
             ),
           ),

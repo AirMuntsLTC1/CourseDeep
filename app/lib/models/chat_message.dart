@@ -6,10 +6,11 @@ class Source {
 }
 
 class ChatMessage {
-  ChatMessage({required this.role, required this.text, this.sources = const [], DateTime? time})
+  ChatMessage({required this.role, required this.text, this.sources = const [], this.imageBase64, DateTime? time})
       : time = time ?? DateTime.now();
 
   final List<Source> sources;
+  final String? imageBase64;
 
   /// 'user', 'assistant' or 'error'
   final String role;
@@ -24,6 +25,7 @@ class ChatMessage {
         'text': text,
         'time': time.toIso8601String(),
         'sources': sources.map((s) => {'title': s.title, 'url': s.url}).toList(),
+        'imageBase64': imageBase64,
       };
 
   factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
@@ -31,6 +33,7 @@ class ChatMessage {
         text: j['text'] as String,
         time: DateTime.tryParse(j['time'] as String? ?? '') ?? DateTime.now(),
         sources: (j['sources'] as List? ?? []).map((e) => Source.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+        imageBase64: j['imageBase64'] as String?,
       );
 }
 
