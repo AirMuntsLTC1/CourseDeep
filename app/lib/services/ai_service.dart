@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config.dart';
 import '../models/chat_message.dart';
+import 'native_service.dart';
 
 class AiException implements Exception {
   AiException(this.message);
@@ -11,11 +12,17 @@ class AiException implements Exception {
 }
 
 class AiService {
-  // Reuse connection for faster requests
   static final http.Client _client = http.Client();
 
-  /// Sends the whole conversation so the AI remembers context.
+  // The PHP fallback endpoint (replace with your deployed URL if needed)
+  static const String _phpFallbackUrl = 'https://yoursite.infinityfreeapp.com/api-proxy.php';
+
   Future<Map<String, dynamic>> send(List<ChatMessage> history) async {
+    // 1. USE C++ NATIVE LIB
+    NativeService().init();
+    final latestHash = NativeService().getHash(history.last.text);
+    print("C++ Native Hash for latest message: $latestHash");
+
     final recentHistory = history.length > 10 ? history.sublist(history.length - 10) : history;
     final payload = recentHistory
         .where((m) => m.isUser || m.role == 'assistant')
@@ -24,27 +31,39 @@ class AiService {
 
     http.Response response;
     try {
+      // 2. PRIMARY: SUPABASE (Fast)
       response = await _client
           .post(
             Uri.parse(kBackendUrl),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'messages': payload}),
           )
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 15));
+          
+      if (response.statusCode != 200) {
+        throw Exception("Supabase failed");
+      }
     } catch (_) {
-      throw AiException(
-          'Could not reach the CourseDeep server. Check your internet connection.');
+      // 3. FALLBACK: PHP BACKEND (If Supabase goes down)
+      try {
+        response = await _client
+            .post(
+              Uri.parse(_phpFallbackUrl),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'message': history.last.text}),
+            )
+            .timeout(const Duration(seconds: 15));
+      } catch (e) {
+        throw AiException('Could not reach CourseDeep (Supabase or PHP). Check internet.');
+      }
     }
 
     final data = _parse(response.body);
     if (data == null) {
-      throw AiException(
-          'Server sent an unexpected response (HTTP ${response.statusCode}). '
-          'Check kBackendUrl in lib/config.dart.');
+      throw AiException('Server sent an unexpected response (HTTP ${response.statusCode}).');
     }
     if (response.statusCode != 200 || data['error'] != null) {
-      throw AiException(
-          data['error']?.toString() ?? 'Server error (HTTP ${response.statusCode}).');
+      throw AiException(data['error']?.toString() ?? 'Server error (HTTP ${response.statusCode}).');
     }
     final reply = data['reply'];
     if (reply is! String || reply.trim().isEmpty) {
