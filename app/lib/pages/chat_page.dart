@@ -100,8 +100,14 @@ class _ChatPageState extends State<ChatPage> {
 
     ChatMessage reply;
     try {
-      final answer = await _ai.send(s.messages);
-      reply = ChatMessage(role: 'assistant', text: answer);
+      final result = await _ai.send(s.messages);
+      reply = ChatMessage(
+        role: 'assistant',
+        text: result['reply'],
+        sources: (result['sources'] as List)
+            .map((e) => Source.fromJson(Map<String, dynamic>.from(e)))
+            .toList(),
+      );
     } on AiException catch (e) {
       reply = ChatMessage(role: 'error', text: e.message);
     } catch (e) {
@@ -265,78 +271,119 @@ class _Bubble extends StatelessWidget {
     final isUser = msg.isUser;
     final isErr = msg.isError;
 
-    final bg = isErr
-        ? cs.errorContainer
-        : isUser
-            ? cs.primary
-            : cs.surfaceContainerHighest;
-    final fg = isErr
-        ? cs.onErrorContainer
-        : isUser
-            ? cs.onPrimary
-            : cs.onSurface;
-
-    final bubble = Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.only(
-          topLeft: const Radius.circular(18),
-          topRight: const Radius.circular(18),
-          bottomLeft: Radius.circular(isUser ? 18 : 4),
-          bottomRight: Radius.circular(isUser ? 4 : 18),
-        ),
-      ),
-      child: MarkdownBody(
-        data: msg.text,
-        selectable: true,
-        styleSheet: MarkdownStyleSheet(
-          p: TextStyle(color: fg, height: 1.4, fontSize: 15),
-          code: TextStyle(backgroundColor: cs.surface, color: cs.primary, fontFamily: 'monospace'),
-          codeblockDecoration: BoxDecoration(
-            color: cs.surface,
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-      ),
-    );
-
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      child: Column(
+        crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          if (!isUser) ...[
-            CircleAvatar(
-              radius: 15,
-              backgroundColor: isErr ? cs.error : cs.primaryContainer,
-              child: Icon(
-                isErr ? Icons.error_outline : Icons.auto_awesome,
-                size: 16,
-                color: isErr ? cs.onError : cs.onPrimaryContainer,
+          // Source Chips (Only show if there are sources and it's not a user message)
+          if (!isUser && msg.sources.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: SizedBox(
+                height: 40,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: msg.sources.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, i) {
+                    final source = msg.sources[i];
+                    final domain = Uri.tryParse(source.url)?.host ?? '';
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: cs.outlineVariant),
+                      ),
+                      child: Row(
+                        children: [
+                          if (domain.isNotEmpty)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: Image.network(
+                                'https://www.google.com/s2/favicons?domain=$domain&sz=32',
+                                width: 16,
+                                height: 16,
+                                errorBuilder: (_, __, ___) => Icon(Icons.language, size: 16, color: cs.primary),
+                              ),
+                            ),
+                          const SizedBox(width: 8),
+                          Text(
+                            domain.replaceAll('www.', ''),
+                            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Column(
-              crossAxisAlignment:
-                  isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                bubble,
-                if (!isUser && !isErr)
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    iconSize: 18,
-                    tooltip: 'Copy',
-                    onPressed: onCopy,
-                    icon: Icon(Icons.copy_rounded, color: cs.onSurfaceVariant),
+
+          // Message Text
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+            children: [
+              if (!isUser) ...[
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: isErr ? cs.error : cs.primary,
+                  child: Icon(
+                    isErr ? Icons.error_outline : Icons.auto_awesome,
+                    size: 16,
+                    color: isErr ? cs.onError : cs.onPrimary,
                   ),
+                ),
+                const SizedBox(width: 12),
               ],
-            ),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  children: [
+                    if (isUser)
+                      // User message gets a very subtle background block, not a bubble
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(msg.text, style: TextStyle(color: cs.onSurface, height: 1.4, fontSize: 15)),
+                      )
+                    else
+                      // AI message is flat text (like ChatGPT/Perplexity)
+                      MarkdownBody(
+                        data: msg.text,
+                        selectable: true,
+                        styleSheet: MarkdownStyleSheet(
+                          p: TextStyle(color: cs.onSurface, height: 1.5, fontSize: 15),
+                          code: TextStyle(backgroundColor: cs.surface, color: cs.primary, fontFamily: 'monospace'),
+                          codeblockDecoration: BoxDecoration(
+                            color: cs.surface,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: cs.outlineVariant),
+                          ),
+                        ),
+                      ),
+                    
+                    // Copy button for AI
+                    if (!isUser && !isErr)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: IconButton(
+                          visualDensity: VisualDensity.compact,
+                          iconSize: 18,
+                          tooltip: 'Copy',
+                          onPressed: onCopy,
+                          icon: Icon(Icons.copy_rounded, color: cs.onSurfaceVariant),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),

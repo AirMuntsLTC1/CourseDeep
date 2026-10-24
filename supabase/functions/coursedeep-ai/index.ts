@@ -38,10 +38,12 @@ serve(async (req) => {
 
     // 2. Perform search if needed
     let context = ""
+    let sources = []
     if (decision.startsWith("SEARCH:")) {
       const searchQuery = decision.replace("SEARCH:", "").trim()
       try {
         const searchRes = await tvly.search(searchQuery, { searchDepth: "basic" })
+        sources = searchRes.results
         context = searchRes.results.map((r: any) => `- ${r.title}: ${r.content}`).join("\n\n")
       } catch (e) {
         console.error("Tavily search failed:", e)
@@ -65,7 +67,7 @@ serve(async (req) => {
     const finalData = await finalRes.json()
     const reply = finalData.choices[0].message.content
 
-    return new Response(JSON.stringify({ reply }), {
+    return new Response(JSON.stringify({ reply, sources }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error: any) {

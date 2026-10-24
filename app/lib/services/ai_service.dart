@@ -12,7 +12,7 @@ class AiException implements Exception {
 
 class AiService {
   /// Sends the whole conversation so the AI remembers context.
-  Future<String> send(List<ChatMessage> history) async {
+  Future<Map<String, dynamic>> send(List<ChatMessage> history) async {
     final payload = history
         .where((m) => m.isUser || m.role == 'assistant')
         .map((m) => {'role': m.role, 'content': m.text})
@@ -46,7 +46,10 @@ class AiService {
     if (reply is! String || reply.trim().isEmpty) {
       throw AiException('The AI returned an empty answer. Please try again.');
     }
-    return reply.trim();
+    return {
+      'reply': reply.trim(),
+      'sources': data['sources'] ?? [],
+    };
   }
 
   Map<String, dynamic>? _parse(String raw) {
