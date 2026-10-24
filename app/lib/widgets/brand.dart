@@ -37,7 +37,7 @@ class AiMark extends StatelessWidget {
         width: size,
         height: size,
         decoration: const BoxDecoration(shape: BoxShape.circle, gradient: Brand.gradient),
-        child: CustomPaint(painter: const _SparklePainter(Colors.white)),
+        child: const CustomPaint(painter: _SparklePainter(Colors.white)),
       );
 }
 
@@ -94,7 +94,7 @@ class _AiOrbState extends State<AiOrb> with SingleTickerProviderStateMixin {
                 width: s * 0.9,
                 height: s * 0.9,
                 decoration: const BoxDecoration(shape: BoxShape.circle, gradient: Brand.gradient),
-                child: CustomPaint(painter: const _SparklePainter(Colors.white)),
+                child: const CustomPaint(painter: _SparklePainter(Colors.white)),
               ),
             ]);
           },

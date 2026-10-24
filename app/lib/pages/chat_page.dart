@@ -340,7 +340,7 @@ class _ChatPageState extends State<ChatPage> {
         reply.role = 'error';
         reply.text = failure;
       } else {
-        reply.append('\n\n_…$failure_');
+        reply.append('\n\n_…${failure}_');
       }
     } else if (reply.text.trim().isEmpty) {
       reply.role = 'error';
@@ -530,7 +530,6 @@ class _ChatPageState extends State<ChatPage> {
                       : Stack(children: [
                           ListView.builder(
                             controller: _scroll,
-                            cacheExtent: 1500,
                             padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                             itemCount: messages.length,
                             itemBuilder: (_, i) => MessageView(

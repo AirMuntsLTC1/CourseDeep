@@ -17,12 +17,12 @@ class Attachment {
   final String name;
   final AttachKind kind;
   final String mime;
-  String? path; // copy inside the app folder (survives restarts)
-  String? text; // extracted text sent to the AI
+  String? path;
+  String? text;
   int size;
   String? note;
-  bool loading; // transient
-  bool failed = false; // transient
+  bool loading;
+  bool failed = false;
 
   Map<String, dynamic> toJson() => {
         'name': name,
@@ -57,40 +57,33 @@ class Source {
   Map<String, dynamic> toJson() => {'title': title, 'url': url};
 }
 
-/// A message is a ChangeNotifier so only the streaming row rebuilds while tokens arrive.
 class ChatMessage extends ChangeNotifier {
   ChatMessage({
     String? id,
     required this.role,
-    String text = '',
+    this.text = '',
     List<Source>? sources,
     List<Attachment>? attachments,
     DateTime? time,
     this.provider,
     this.streaming = false,
   })  : id = id ?? DateTime.now().microsecondsSinceEpoch.toString(),
-        _text = text,
         sources = sources ?? [],
         attachments = attachments ?? [],
         time = time ?? DateTime.now();
 
   final String id;
-
-  /// 'user', 'assistant' or 'error'
   String role;
-  String _text;
+  String text;
   List<Source> sources;
   final List<Attachment> attachments;
   final DateTime time;
   String? provider;
 
-  // transient streaming state
   bool streaming;
   String status = '';
 
-  String get text => _text;
-  set text(String v) => _text = v;
-  void append(String d) => _text += d;
+  void append(String d) => text += d;
   void update() => notifyListeners();
 
   bool get isUser => role == 'user';
@@ -100,7 +93,7 @@ class ChatMessage extends ChangeNotifier {
   Map<String, dynamic> toJson() => {
         'id': id,
         'role': role,
-        'text': _text,
+        'text': text,
         'time': time.toIso8601String(),
         'provider': provider,
         'sources': sources.map((s) => s.toJson()).toList(),

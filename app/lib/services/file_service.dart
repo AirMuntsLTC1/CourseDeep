@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -261,7 +260,7 @@ class FileService {
       final bytes = utf8.encode(f.content);
       arc.addFile(ArchiveFile.bytes(clean.isEmpty ? 'file.txt' : clean, Uint8List.fromList(bytes)));
     }
-    final data = ZipEncoder().encode(arc) as List<int>;
+    final data = ZipEncoder().encode(arc);
     final tmp = await getTemporaryDirectory();
     final dir = await Directory(p.join(tmp.path, 'generated')).create(recursive: true);
     final z = File(p.join(dir.path, name));
