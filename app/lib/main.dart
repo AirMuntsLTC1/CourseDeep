@@ -1,69 +1,61 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'pages/chat_page.dart';
-
-
-void _preWarmBackend() async {
-  try {
-    // Send a tiny dummy request to wake up the Supabase Edge Function
-    await http.post(
-      Uri.parse(kBackendUrl),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'messages': [{'role': 'user', 'content': 'ping'}]}),
-    ).timeout(const Duration(seconds: 5));
-  } catch (_) {
-    // Ignore errors, this is just to warm up the server
-  }
-}
+import 'services/ai_service.dart';
+import 'services/native_service.dart';
+import 'theme/app_theme.dart';
 
 void main() {
-  _preWarmBackend(); // Fire and forget
+  WidgetsFlutterBinding.ensureInitialized();
+  NativeService().init(); // load libcoursedeep.so (C++)
+  AiService.warmUp(); // free ping: wakes the edge function, uses no AI quota
   runApp(const CourseDeepApp());
 }
 
-
 class CourseDeepApp extends StatefulWidget {
   const CourseDeepApp({super.key});
-
   @override
   State<CourseDeepApp> createState() => _CourseDeepAppState();
 }
 
 class _CourseDeepAppState extends State<CourseDeepApp> {
-  ThemeMode _mode = ThemeMode.system;
+  ThemeMode _mode = ThemeMode.dark;
 
-  bool get _isDark {
-    if (_mode == ThemeMode.dark) return true;
-    if (_mode == ThemeMode.light) return false;
-    return WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-        Brightness.dark;
+  @override
+  void initState() {
+    super.initState();
+    _loadMode();
   }
 
-  ThemeData _theme(Brightness b) => ThemeData(
-        useMaterial3: true,
-        colorScheme:
-            ColorScheme.fromSeed(seedColor: const Color(0xFF6C4CF5), brightness: b),
-        appBarTheme: const AppBarTheme(
-          centerTitle: false,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-        ),
-      );
+  Future<void> _loadMode() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final v = p.getString('theme_mode');
+      if (v != null && mounted) setState(() => _mode = v == 'light' ? ThemeMode.light : ThemeMode.dark);
+    } catch (_) {}
+  }
+
+  bool _isDark(BuildContext c) => _mode == ThemeMode.dark || (_mode == ThemeMode.system && MediaQuery.platformBrightnessOf(c) == Brightness.dark);
+
+  Future<void> _toggle(BuildContext c) async {
+    final next = _isDark(c) ? ThemeMode.light : ThemeMode.dark;
+    setState(() => _mode = next);
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString('theme_mode', next == ThemeMode.light ? 'light' : 'dark');
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'CourseDeep',
       debugShowCheckedModeBanner: false,
-      theme: _theme(Brightness.light),
-      darkTheme: _theme(Brightness.dark),
+      theme: buildTheme(Brightness.light),
+      darkTheme: buildTheme(Brightness.dark),
       themeMode: _mode,
-      home: ChatPage(
-        isDark: _isDark,
-        onToggleTheme: () =>
-            setState(() => _mode = _isDark ? ThemeMode.light : ThemeMode.dark),
+      home: Builder(
+        builder: (c) => ChatPage(isDark: _isDark(c), onToggleTheme: () => _toggle(c)),
       ),
     );
   }

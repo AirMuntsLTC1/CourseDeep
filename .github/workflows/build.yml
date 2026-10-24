@@ -33,17 +33,32 @@ jobs:
       - name: Show Flutter version
         run: flutter --version
 
+      - name: Make sure the Android project exists
+        working-directory: app
+        run: |
+          if [ ! -d android ]; then
+            flutter create --platforms=android --project-name coursedeep --org com.coursedeep .
+          fi
+
+      # FIX: the old step used the Linux host compiler, which makes an x86 .so that Android
+      # cannot load (the app silently fell back to Dart). Build with the Android NDK instead.
+      - name: Compile C++ native library (Android NDK, arm64)
+        run: |
+          NDK="${ANDROID_NDK_HOME:-${ANDROID_NDK_LATEST_HOME}}"
+          CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang++"
+          mkdir -p app/android/app/src/main/jniLibs/arm64-v8a
+          "$CXX" -shared -fPIC -O2 -fvisibility=hidden -std=c++17 \
+            -Wl,-z,max-page-size=16384 \
+            native/coursedeep.cpp \
+            -o app/android/app/src/main/jniLibs/arm64-v8a/libcoursedeep.so
+          file app/android/app/src/main/jniLibs/arm64-v8a/libcoursedeep.so
+
       - name: Cache pub packages
         uses: actions/cache@v4
         with:
           path: ~/.pub-cache
-          key: pub-${{ runner.os }}-${{ hashFiles('app/pubspec.lock') }}
+          key: pub-${{ runner.os }}-${{ hashFiles('app/pubspec.yaml') }}
           restore-keys: pub-${{ runner.os }}-
-
-      - name: Compile C++ Native Library
-        run: |
-          mkdir -p app/android/app/src/main/jniLibs/arm64-v8a
-          clang++ -shared -fPIC native/coursedeep.cpp -o app/android/app/src/main/jniLibs/arm64-v8a/libcoursedeep.so
 
       - name: flutter pub get
         working-directory: app
@@ -59,7 +74,6 @@ jobs:
           GRADLE = "8.14"
           APP_NAME = "CourseDeep"
 
-          # 1. Bump Android Gradle Plugin (Groovy or Kotlin DSL)
           for f in glob.glob("*.gradle*") + glob.glob("app/*.gradle*"):
               s = open(f).read()
               n = re.sub(r'(com\.android\.application["\']\)?\s*version\s*["\'])[0-9.]+',
@@ -70,7 +84,6 @@ jobs:
                   open(f, "w").write(n)
                   print("Updated AGP in", f)
 
-          # 2. Bump Gradle wrapper
           p = "gradle/wrapper/gradle-wrapper.properties"
           if os.path.exists(p):
               s = open(p).read()
@@ -79,7 +92,6 @@ jobs:
                   open(p, "w").write(n)
                   print("Updated Gradle wrapper")
 
-          # 3. Manifest: app name shown on the phone + internet permission
           m = "app/src/main/AndroidManifest.xml"
           if os.path.exists(m):
               s = open(m).read()
@@ -88,8 +100,14 @@ jobs:
                   s = re.sub(r'(<manifest[^>]*>)',
                              r'\1\n    <uses-permission android:name="android.permission.INTERNET" />',
                              s, count=1)
+              # Android 11+: lets the app open source links in the browser / other apps
+              if "<queries>" not in s:
+                  s = s.replace("<application",
+                      '<queries>\n        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="https" /></intent>\n'
+                      '        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="http" /></intent>\n'
+                      '    </queries>\n    <application', 1)
               open(m, "w").write(s)
-              print("Manifest set to", APP_NAME)
+              print("Manifest patched:", APP_NAME)
           PY
 
       - name: Build arm64-only, obfuscated, release APK
@@ -106,9 +124,6 @@ jobs:
         working-directory: app
         run: |
           ls -lh build/app/outputs/flutter-apk/
-          for f in build/app/outputs/flutter-apk/*.apk; do
-            [ -f "$f" ] && printf "%-45s %s\n" "$(basename "$f")" "$(du -h "$f" | cut -f1)"
-          done
 
       - name: Upload arm64 APK
         uses: actions/upload-artifact@v4

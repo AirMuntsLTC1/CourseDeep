@@ -1,7 +1,7 @@
 name: coursedeep
-description: CourseDeep - free AI assistant
+description: CourseDeep - AI assistant with web search, vision and file tools
 publish_to: 'none'
-version: 1.1.0+2
+version: 2.0.0+3
 environment:
   sdk: ">=3.0.0 <4.0.0"
 dependencies:
@@ -13,6 +13,10 @@ dependencies:
   flutter_markdown: ^0.7.7+1
   http: ^1.2.0
   image_picker: ^1.2.4
+  markdown: ^7.3.0
+  path: ^1.9.0
+  path_provider: ^2.1.5
+  share_plus: ^11.0.0
   shared_preferences: ^2.3.0
   url_launcher: ^6.3.3
   webview_flutter: ^4.14.1
