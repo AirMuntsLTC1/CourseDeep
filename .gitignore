@@ -1,0 +1,7 @@
+.env
+*.env
+key.txt
+secrets/
+*.key
+*.pem
+native/*.o
