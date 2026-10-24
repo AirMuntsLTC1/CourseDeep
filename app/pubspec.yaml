@@ -5,6 +5,7 @@ version: 1.1.0+2
 environment:
   sdk: ">=3.0.0 <4.0.0"
 dependencies:
+  ffi: ^2.2.0
   flutter:
     sdk: flutter
   flutter_markdown: ^0.7.7+1

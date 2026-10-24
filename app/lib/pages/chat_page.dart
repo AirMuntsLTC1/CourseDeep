@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../models/chat_message.dart';
 import '../services/ai_service.dart';
 import '../services/chat_store.dart';
@@ -298,7 +297,7 @@ class _MessageRow extends StatelessWidget {
               width: 28,
               height: 28,
               decoration: BoxDecoration(
-                color: isErr ? cs.error : cs.primary.withOpacity(0.15),
+                color: isErr ? cs.error : cs.primary.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -318,7 +317,7 @@ class _MessageRow extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      color: cs.surfaceContainerHighest.withOpacity(0.5),
+                      color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
@@ -346,9 +345,9 @@ class _MessageRow extends StatelessWidget {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: cs.surfaceContainerHighest.withOpacity(0.4),
+                                    color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
                                     borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
+                                    border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -391,11 +390,11 @@ class _MessageRow extends StatelessWidget {
                           a: TextStyle(color: cs.primary, decoration: TextDecoration.underline),
                           code: TextStyle(backgroundColor: cs.surfaceContainerHighest, color: cs.primary, fontFamily: 'monospace', fontSize: aiFontSize - 2),
                           codeblockDecoration: BoxDecoration(
-                            color: cs.surfaceContainerHighest.withOpacity(0.6),
+                            color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           blockquoteDecoration: BoxDecoration(
-                            color: cs.surfaceContainerHighest.withOpacity(0.3),
+                            color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
                             border: Border(left: BorderSide(color: cs.primary, width: 4)),
                           ),
                         ),
@@ -445,7 +444,7 @@ class _ThinkingPill extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
-            color: cs.surfaceContainerHighest.withOpacity(0.5),
+            color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Row(
@@ -493,7 +492,7 @@ class _EmptyState extends StatelessWidget {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: cs.primary.withOpacity(0.1),
+                color: cs.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.auto_awesome, color: cs.primary, size: 32),
@@ -509,8 +508,8 @@ class _EmptyState extends StatelessWidget {
                 for (final s in _suggestions)
                   ActionChip(
                     label: Text(s, style: const TextStyle(fontSize: 13)),
-                    backgroundColor: cs.surfaceContainerHighest.withOpacity(0.4),
-                    side: BorderSide(color: cs.outlineVariant.withOpacity(0.3)),
+                    backgroundColor: cs.surfaceContainerHighest.withValues(alpha: 0.4),
+                    side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     onPressed: () => onPick(s),
                   ),
@@ -537,9 +536,9 @@ class _InputBar extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 4, 6, 4),
         decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withOpacity(0.4),
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
         ),
         child: Row(children: [
           Expanded(
@@ -552,7 +551,7 @@ class _InputBar extends StatelessWidget {
               onSubmitted: (_) => onSend(),
               decoration: InputDecoration(
                 hintText: 'Reply to CourseDeep...',
-                hintStyle: TextStyle(color: cs.onSurfaceVariant.withOpacity(0.7)),
+                hintStyle: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
                 border: InputBorder.none,
                 isDense: true,
               ),

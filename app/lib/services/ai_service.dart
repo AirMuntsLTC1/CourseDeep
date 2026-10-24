@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import '../config.dart';
 import '../models/chat_message.dart';
 import 'native_service.dart';
@@ -21,7 +22,7 @@ class AiService {
     // 1. USE C++ NATIVE LIB
     NativeService().init();
     final latestHash = NativeService().getHash(history.last.text);
-    print("C++ Native Hash for latest message: $latestHash");
+    debugPrint("C++ Native Hash for latest message: $latestHash");
 
     final recentHistory = history.length > 10 ? history.sublist(history.length - 10) : history;
     final payload = recentHistory
