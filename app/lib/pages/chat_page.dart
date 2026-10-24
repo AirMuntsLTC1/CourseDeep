@@ -249,7 +249,6 @@ class _ChatPageState extends State<ChatPage> {
                         controller: _scroll,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         itemCount: messages.length,
-                        scrollCacheExtent: 1000, // Improves scrolling performance
                         itemBuilder: (_, i) => RepaintBoundary(
                           child: _MessageRow(msg: messages[i], onCopy: () => _copy(messages[i].text), onOpenLink: _openLink),
                         ),
