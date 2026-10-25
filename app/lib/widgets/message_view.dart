@@ -44,26 +44,28 @@ IconData iconFor(String name, {AttachKind? kind}) {
 }
 
 class MessageView extends StatelessWidget {
-  const MessageView({super.key, required this.msg, required this.isLast, required this.actions});
+  const MessageView({super.key, required this.msg, required this.isLast, required this.actions, required this.fontSize});
   final ChatMessage msg;
   final bool isLast;
   final MessageActions actions;
+  final double fontSize;
 
   @override
   Widget build(BuildContext context) {
-    if (msg.isUser) return _UserBubble(msg: msg, actions: actions);
+    if (msg.isUser) return _UserBubble(msg: msg, actions: actions, fontSize: fontSize);
     return ListenableBuilder(
       listenable: msg,
-      builder: (_, __) => _AssistantBlock(msg: msg, isLast: isLast, actions: actions),
+      builder: (_, __) => _AssistantBlock(msg: msg, isLast: isLast, actions: actions, fontSize: fontSize),
     );
   }
 }
 
 // ───────────────────────── user ─────────────────────────
 class _UserBubble extends StatelessWidget {
-  const _UserBubble({required this.msg, required this.actions});
+  const _UserBubble({required this.msg, required this.actions, required this.fontSize});
   final ChatMessage msg;
   final MessageActions actions;
+  final double fontSize;
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +126,7 @@ class _UserBubble extends StatelessWidget {
                     ),
                     border: Border.all(color: pal.border),
                   ),
-                  child: Text(msg.text, style: TextStyle(color: pal.text, fontSize: 16, height: 1.42)),
+                  child: Text(msg.text, style: TextStyle(color: pal.text, fontSize: fontSize, height: 1.42)),
                 ),
             ]),
           ),
@@ -188,14 +190,15 @@ String _linkCitations(String t, List<Source> sources) {
 }
 
 class _AssistantBlock extends StatelessWidget {
-  const _AssistantBlock({required this.msg, required this.isLast, required this.actions});
+  const _AssistantBlock({required this.msg, required this.isLast, required this.actions, required this.fontSize});
   final ChatMessage msg;
   final bool isLast;
   final MessageActions actions;
+  final double fontSize;
 
   MarkdownStyleSheet _sheet(BuildContext c, Pal pal) {
     final cs = Theme.of(c).colorScheme;
-    const fs = 16.5;
+    final fs = fontSize;
     TextStyle base({double? size, FontWeight? w}) => TextStyle(color: pal.text, fontSize: size ?? fs, height: 1.6, fontWeight: w);
     return MarkdownStyleSheet.fromTheme(Theme.of(c)).copyWith(
       p: base(),

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/chat_message.dart';
 import '../services/ai_service.dart';
 import '../services/chat_store.dart';
@@ -16,6 +17,7 @@ import '../widgets/brand.dart';
 import '../widgets/composer.dart';
 import '../widgets/message_view.dart';
 import 'webview_page.dart';
+import 'settings_page.dart';
 
 const int _kMaxAttachments = 6;
 
@@ -43,6 +45,7 @@ class _ChatPageState extends State<ChatPage> {
   bool _busy = false;
   bool _search = true;
   bool _stick = true; // auto-scroll only while the user is at the bottom
+  double _fontSize = 16.5;
   final List<Attachment> _pending = [];
 
   AiRequest? _req;
@@ -65,6 +68,7 @@ class _ChatPageState extends State<ChatPage> {
     super.initState();
     _scroll.addListener(_onScroll);
     _load();
+    _loadFontSize();
   }
 
   @override
@@ -76,6 +80,18 @@ class _ChatPageState extends State<ChatPage> {
     _scroll.dispose();
     _showJump.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadFontSize() async {
+    final p = await SharedPreferences.getInstance();
+    final size = p.getDouble('ai_font_size');
+    if (size != null && mounted) setState(() => _fontSize = size);
+  }
+
+  Future<void> _setFontSize(double size) async {
+    setState(() => _fontSize = size);
+    final p = await SharedPreferences.getInstance();
+    await p.setDouble('ai_font_size', size);
   }
 
   // ───────────────────────── data ─────────────────────────
@@ -505,67 +521,18 @@ class _ChatPageState extends State<ChatPage> {
   }
 
 
-  void _showSettings() {
-    final pal = Pal.of(context);
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text('Settings', style: TextStyle(color: pal.text, fontSize: 18, fontWeight: FontWeight.bold)),
-            ),
-            ListTile(
-              leading: Icon(Icons.cleaning_services_outlined, color: pal.text),
-              title: Text('Clear all chats', style: TextStyle(color: pal.text)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _clearAllChats();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.info_outline, color: pal.text),
-              title: Text('About CourseDeep', style: TextStyle(color: pal.text)),
-              subtitle: Text('Version 2.0.0 — 11 AI Fallbacks', style: TextStyle(color: pal.dim)),
-              onTap: () => Navigator.pop(ctx),
-            ),
-            const Divider(),
-            ListTile(
-              leading: Icon(Icons.logout_rounded, color: Theme.of(ctx).colorScheme.error),
-              title: Text(
-                'Log out completely',
-                style: TextStyle(color: Theme.of(ctx).colorScheme.error, fontWeight: FontWeight.w600),
-              ),
-              onTap: () async {
-                // 1. Close the settings menu
-                Navigator.pop(ctx); 
-                
-                // 2. Clear local session immediately so UI updates instantly
-                await Supabase.instance.client.auth.signOut(scope: SignOutScope.local);
-                
-                // 3. Attempt to revoke the token on the server (fails silently if offline)
-                try {
-                  await Supabase.instance.client.auth.signOut();
-                } catch (_) {}
-              },
-            ),
-            const SizedBox(height: 10),
-          ],
+  void _openSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SettingsPage(
+          isDark: widget.isDark,
+          onToggleTheme: widget.onToggleTheme,
+          fontSize: _fontSize,
+          onFontSizeChanged: _setFontSize,
         ),
       ),
     );
-  }
-
-  void _clearAllChats() {
-    setState(() {
-      _sessions.clear();
-      _current = null;
-    });
-    _store.clear();
-    _toast('All chats cleared');
   }
 
   // ───────────────────────── build ─────────────────────────
@@ -602,6 +569,7 @@ class _ChatPageState extends State<ChatPage> {
                               msg: messages[i],
                               isLast: i == messages.length - 1,
                               actions: _actions,
+                              fontSize: _fontSize,
                             ),
                           ),
                           Positioned(
@@ -812,7 +780,7 @@ class _ChatPageState extends State<ChatPage> {
                   icon: Icon(Icons.settings_outlined, color: pal.text),
                   onPressed: () {
                     Navigator.pop(context); // Close drawer first
-                    _showSettings();
+                    _openSettings();
                   },
                 ),
               ],
