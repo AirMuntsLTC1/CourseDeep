@@ -136,6 +136,25 @@ jobs:
                   s = re.sub(r'(<manifest[^>]*>)',
                              r'\1\n    <uses-permission android:name="android.permission.INTERNET" />',
                              s, count=1)
+              if "REQUEST_INSTALL_PACKAGES" not in s:
+                  s = re.sub(r'(<manifest[^>]*>)',
+                             r'\1\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />',
+                             s, count=1)
+              if "WRITE_EXTERNAL_STORAGE" not in s:
+                  s = re.sub(r'(<manifest[^>]*>)',
+                             r'\1\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />',
+                             s, count=1)
+              if "OtaUpdateFileProvider" not in s:
+                  provider = '''<provider
+                      android:name="sk.fourq.otaupdate.OtaUpdateFileProvider"
+                      android:authorities="${applicationId}.ota_update_provider"
+                      android:exported="false"
+                      android:grantUriPermissions="true">
+                      <meta-data
+                          android:name="android.support.FILE_PROVIDER_PATHS"
+                          android:resource="@xml/filepaths" />
+                  </provider>'''
+                  s = s.replace('</application>', provider + '\n    </application>', 1)
               # Android 11+: lets the app open source links in the browser / other apps
               if "<queries>" not in s:
                   s = s.replace("<application",
@@ -145,6 +164,16 @@ jobs:
               open(m, "w").write(s)
               print("Manifest patched:", APP_NAME)
           PY
+
+      - name: Create FileProvider XML for OTA Update
+        run: |
+          mkdir -p app/android/app/src/main/res/xml
+          cat > app/android/app/src/main/res/xml/filepaths.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <paths xmlns:android="http://schemas.android.com/apk/res/android">
+              <files-path name="internal_apk_storage" path="ota_update/"/>
+          </paths>
+          EOF
 
       - name: Build arm64-only, obfuscated, release APK
         working-directory: app

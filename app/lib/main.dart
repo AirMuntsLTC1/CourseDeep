@@ -5,6 +5,7 @@ import 'pages/email_code_login_page.dart';
 import 'services/ai_service.dart';
 import 'services/app_settings.dart';
 import 'services/native_service.dart';
+import 'services/update_service.dart';
 import 'theme/app_theme.dart';
 import 'widgets/brand.dart';
 
