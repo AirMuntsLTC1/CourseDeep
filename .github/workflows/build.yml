@@ -110,6 +110,31 @@ jobs:
         working-directory: app
         run: flutter pub get
 
+      # ota_update 5.1.0 has no `namespace` in its build.gradle, which Android Gradle Plugin 8+ requires
+      # ("Namespace not specified" build error). Patch the downloaded plugin before building.
+      - name: Patch ota_update namespace (AGP 8 fix)
+        run: |
+          python3 - << 'PY'
+          import glob, os, re
+          roots = [os.environ.get("PUB_CACHE", ""), os.path.expanduser("~/.pub-cache")]
+          files = []
+          for r in roots:
+              if r:
+                  files += glob.glob(r + "/hosted/pub.dev/ota_update-*/android/build.gradle")
+          for f in sorted(set(files)):
+              s = open(f).read()
+              if "namespace" in s:
+                  print("already has namespace:", f)
+                  continue
+              m = open(os.path.join(os.path.dirname(f), "src/main/AndroidManifest.xml")).read()
+              pkg = (re.search(r'package="([^"]+)"', m) or [None, "sk.fourq.otaupdate"])[1]
+              s = re.sub(r'android\s*\{', 'android {\n    namespace "' + pkg + '"', s, count=1)
+              open(f, "w").write(s)
+              print("patched", f, "->", pkg)
+          if not files:
+              raise SystemExit("ota_update build.gradle not found in pub cache")
+          PY
+
       - name: Upgrade Android Gradle Plugin, Gradle, name, and permissions
         working-directory: app/android
         run: |
