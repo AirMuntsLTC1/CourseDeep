@@ -16,6 +16,7 @@ class MessageActions {
     required this.regenerate,
     required this.openImage,
     required this.more,
+    required this.downloadImage,
     required this.shareFile,
     required this.shareImage,
     required this.shareZip,
@@ -26,6 +27,7 @@ class MessageActions {
   final VoidCallback regenerate;
   final void Function(String path) openImage;
   final void Function(ChatMessage m) more;
+  final void Function(String url) downloadImage;
   final void Function(FileSeg f) shareFile;
   final void Function(ImageSeg img) shareImage;
   final void Function(List<FileSeg> files) shareZip;

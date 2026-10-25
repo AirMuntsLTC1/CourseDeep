@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -11,6 +12,7 @@ import '../services/ai_service.dart';
 import '../services/app_settings.dart';
 import '../services/chat_store.dart';
 import '../services/file_service.dart';
+import 'package:better_download_saver/better_download_saver.dart';
 import '../theme/app_theme.dart';
 import '../util/segments.dart';
 import '../widgets/brand.dart';
@@ -56,6 +58,7 @@ class _ChatPageState extends State<ChatPage> {
     regenerate: _regenerate,
     openImage: _openImage,
     more: _moreSheet,
+    downloadImage: _downloadImage,
     shareFile: _shareFile,
     shareImage: _shareImage,
     shareZip: _shareZip,
@@ -431,6 +434,25 @@ class _ChatPageState extends State<ChatPage> {
       _toast('Image saved to Downloads!');
     } catch (e) {
       _toast('Could not save image.');
+    }
+  }
+
+
+  Future<void> _downloadImage(String url) async {
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final saver = BetterDownloadSaver();
+        await saver.saveToDownloads(
+          fileName: 'coursedeep_image_${DateTime.now().millisecondsSinceEpoch}.jpg',
+          bytes: response.bodyBytes,
+        );
+        _toast('Image saved to Downloads!');
+      } else {
+        _toast('Failed to download image.');
+      }
+    } catch (e) {
+      _toast('Error: $e');
     }
   }
 

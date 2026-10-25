@@ -285,11 +285,37 @@ function race(cands: Cand[], hedgeMs: number, firstTokenMs: number, log: string[
   })
 }
 
+
+async function generateImage(prompt: string): Promise<string> {
+  const encodedPrompt = encodeURIComponent(prompt);
+  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true`;
+  return url;
+}
+
 // ───────────────────────── pipeline ─────────────────────────
 async function run(body: any, emit: Emit, signal?: AbortSignal) {
   const t0 = Date.now()
   const rawList: InMsg[] = Array.isArray(body.messages) ? body.messages : []
   const msgs = sanitize(rawList)
+  
+  // IMAGE GENERATION CHECK
+  const lastUserMsg = msgs.filter(m => m.role === 'user').pop();
+  if (lastUserMsg) {
+    const text = lastUserMsg.text.toLowerCase();
+    if (text.includes('generate image') || text.includes('draw') || text.includes('make a picture') || text.includes('create an image')) {
+      emit({ t: 'status', s: 'thinking', text: 'Generating high-quality image...' });
+      try {
+        const imageUrl = await generateImage(lastUserMsg.text);
+        // Return a special markdown block that our Flutter app recognizes
+        emit({ t: 'delta', d: `\n\n![Generated Image](${imageUrl})\n\n` });
+        emit({ t: 'done', provider: 'Pollinations (Flux)', ms: Date.now() - t0 });
+        return;
+      } catch (e: any) {
+        emit({ t: 'error', message: 'Failed to generate image: ' + e.message });
+        return;
+      }
+    }
+  }
   const lastUser = [...msgs].reverse().find((m) => m.role === 'user')
   if (!lastUser) throw new Error('No message to answer.')
 
