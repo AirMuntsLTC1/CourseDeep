@@ -6,7 +6,7 @@ import 'package:coursedeep/util/segments.dart';
 void main() {
   testWidgets('CourseDeep app builds', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    await tester.pumpWidget(const CourseDeepApp());
+    await tester.pumpWidget(const CourseDeepApp(supabaseConfigured: false));
     await tester.pump(const Duration(milliseconds: 400)); // the logo animates forever: no pumpAndSettle
     expect(find.text('CourseDeep'), findsWidgets);
   });

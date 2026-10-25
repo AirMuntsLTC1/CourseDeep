@@ -182,7 +182,7 @@ class _EmailCodeLoginPageState extends State<EmailCodeLoginPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
-    final accent = const Color(0xFF7967F8);
+    const accent = Color(0xFF7967F8);
 
     return Scaffold(
       body: SafeArea(
