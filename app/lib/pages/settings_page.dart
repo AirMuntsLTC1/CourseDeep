@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -11,7 +12,9 @@ import '../config.dart';
 import '../services/app_settings.dart';
 import '../services/chat_store.dart';
 import '../theme/app_theme.dart';
+import '../services/update_service.dart';
 import '../widgets/logo.dart';
+import '../widgets/update_dialog.dart';
 
 const _languages = ['English', 'Spanish', 'French', 'German', 'Portuguese', 'Chinese', 'Japanese', 'Korean', 'Arabic', 'Hindi', 'Tagalog', 'Indonesian'];
 
@@ -74,49 +77,16 @@ class SettingsPage extends StatelessWidget {
   Future<void> _checkUpdates(BuildContext c) async {
     _toast(c, 'Checking for updates…');
     try {
-      final r = await http.get(Uri.parse(kReleasesApi), headers: {'Accept': 'application/vnd.github+json'}).timeout(const Duration(seconds: 12));
+      final info = await UpdateService.fetchLatest();
       if (!c.mounted) return;
-      if (r.statusCode == 404) {
-        _toast(c, 'No release has been published yet. You have version $kAppVersion.');
-        return;
-      }
-      if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
-      final j = jsonDecode(r.body) as Map;
-      final tag = (j['tag_name'] ?? '').toString().replaceFirst(RegExp(r'^[vV]'), '');
-      if (tag.isEmpty || !_isNewer(tag, kAppVersion)) {
+      if (info == null) {
         _toast(c, 'You are on the latest version ($kAppVersion).');
         return;
       }
-      // Newer release: start the APK download immediately (no tap needed), then show the release page.
-      String? apk;
-      for (final a in (j['assets'] as List? ?? [])) {
-        final name = (a['name'] ?? '').toString().toLowerCase();
-        if (name.endsWith('.apk')) {
-          apk = a['browser_download_url']?.toString();
-          break;
-        }
-      }
-      final page = (j['html_url'] ?? kReleasesPage).toString();
-      _toast(c, apk != null ? 'Version $tag found — downloading the update…' : 'Version $tag found — opening the release page…');
-      if (apk != null) {
-        await launchUrl(Uri.parse(apk), mode: LaunchMode.externalApplication);
-        await Future<void>.delayed(const Duration(milliseconds: 900));
-      }
-      await launchUrl(Uri.parse(page), mode: LaunchMode.externalApplication);
+      await showDialog<void>(context: c, barrierDismissible: false, builder: (_) => UpdateDialog(info: info));
     } catch (_) {
       if (c.mounted) _toast(c, 'Could not check for updates. Check your connection.');
     }
-  }
-
-  // Compares versions like 2.1.0.4 (any number of parts).
-  static bool _isNewer(String a, String b) {
-    List<int> p(String v) => v.split(RegExp(r'[.+\-]')).map((e) => int.tryParse(e.replaceAll(RegExp(r'\D'), '')) ?? 0).toList();
-    final x = p(a), y = p(b);
-    for (var i = 0; i < 4; i++) {
-      final xi = i < x.length ? x[i] : 0, yi = i < y.length ? y[i] : 0;
-      if (xi != yi) return xi > yi;
-    }
-    return false;
   }
 
   void _pickLanguage(BuildContext c) {

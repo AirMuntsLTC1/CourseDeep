@@ -1,3 +1,30 @@
+# CourseDeep 2.3 - what changed
+
+## Deploy (in this order)
+1. Unzip the update over your repo (Termux: `unzip -o CourseDeep_update_2.3.zip -d ~/CourseDeep`).
+2. Edge function (image generator, link reading, search fallback):
+   `supabase functions deploy coursedeep-ai --no-verify-jwt`
+3. `git add . && git commit -m "2.3" && git push` -> GitHub Actions builds the APK and publishes release `v2.3.0.7`.
+4. Install that APK ONCE by hand. From now on every older app shows the blocking "Update required" dialog.
+   To ship a future update: raise `version:` in `app/pubspec.yaml` (e.g. `2.4.0+8`) and push.
+
+## What was fixed
+- **Downloads**: files/images/ZIPs go straight into the phone's Downloads folder (Android MediaStore, written by the build into MainActivity.kt). No share sheet, no Bluetooth. iOS has no public Downloads: files land in the app's Documents folder (add `UIFileSharingEnabled` + `LSSupportsOpeningDocumentsInPlace` = YES to ios/Runner/Info.plist to see them in the Files app).
+- **Image generation**: "generate/draw/create an image/logo/poster..." now returns a real JPEG/PNG (not SVG, not a ZIP), shown in the chat with a Download image button. Recycling order: Gemini Image -> Cloudflare FLUX -> Hugging Face FLUX -> Pollinations FLUX. Ask for "svg" or "code" and you still get text/SVG.
+- **Forced update dialog**: reads the latest GitHub release, cannot be dismissed, Upgrade downloads the APK inside the dialog with a % bar, then opens Android's installer. (The old dialog used a context above MaterialApp, so it could never show.)
+- **Build blockers fixed**: `main.dart` still called `ChatPage(isDark:, onToggleTheme:)` and ignored AppSettings; now consistent with chat_page / settings.
+- **Home screen**: greeting, capability cards (image, search, files, study) and prompt chips.
+- **Frame drops / flicker**: answer parsing cached per message, 100 ms refresh, auto-scroll only stops when YOU scroll up, bigger list cache.
+- **Search / "Chrome access"**: Tavily -> DuckDuckGo fallback, and any link you paste is opened and read by the server.
+- **AI recycling**: Groq (3 models) -> Gemini (5) -> DeepSeek -> SambaNova -> NVIDIA -> Mistral -> OpenRouter -> Hugging Face -> Cloudflare; a provider that hits its limit is skipped for the time it reports.
+
+## Honest limits
+- I could not compile Flutter here. If the GitHub Action shows an error, send me the error line.
+- Provider cooldowns live in memory of the running edge instance (reset on cold start).
+- C++ (`native/coursedeep.cpp`) is connected through FFI (hashing, text squeeze, token estimate); the PHP gateway only works if you set `kFallbackUrl` in `app/lib/config.dart`.
+
+---
+
 # CourseDeep 2.1 — what changed & how to deploy
 
 ## Deploy (do these in order)

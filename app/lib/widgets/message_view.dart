@@ -1,3 +1,4 @@
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -16,7 +17,7 @@ class MessageActions {
     required this.regenerate,
     required this.openImage,
     required this.more,
-    required this.downloadImage,
+    required this.saveGenerated,
     required this.shareFile,
     required this.shareImage,
     required this.shareZip,
@@ -27,7 +28,7 @@ class MessageActions {
   final VoidCallback regenerate;
   final void Function(String path) openImage;
   final void Function(ChatMessage m) more;
-  final void Function(String url) downloadImage;
+  final void Function(Attachment a) saveGenerated;
   final void Function(FileSeg f) shareFile;
   final void Function(ImageSeg img) shareImage;
   final void Function(List<FileSeg> files) shareZip;
@@ -249,6 +250,27 @@ MarkdownStyleSheet mdSheet(BuildContext c, Pal pal, double fontSize) {
 }
 
 
+class _Parsed {
+  _Parsed(this.text, this.nSources, this.think, this.answer, this.segs);
+  final String text;
+  final int nSources;
+  final String? think;
+  final String answer;
+  final List<Seg> segs;
+}
+
+/// Parsing the whole answer on every 100 ms refresh was wasted work: cache per message + text.
+final Expando<_Parsed> _parseCache = Expando<_Parsed>('parse');
+
+_Parsed _parsed(ChatMessage msg) {
+  final c = _parseCache[msg];
+  if (c != null && c.text == msg.text && c.nSources == msg.sources.length) return c;
+  final tk = splitThink(_linkCitations(msg.text, msg.sources));
+  final p = _Parsed(msg.text, msg.sources.length, tk.think, tk.answer, parseSegments(tk.answer));
+  _parseCache[msg] = p;
+  return p;
+}
+
 class _AssistantBlock extends StatelessWidget {
   const _AssistantBlock({required this.msg, required this.isLast, required this.actions, required this.fontSize});
   final ChatMessage msg;
@@ -260,8 +282,10 @@ class _AssistantBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final pal = Pal.of(context);
     final cs = Theme.of(context).colorScheme;
-    final ({String? think, String answer}) tk = msg.isError ? (think: null, answer: '') : splitThink(_linkCitations(msg.text, msg.sources));
-    final segs = msg.isError ? const <Seg>[] : parseSegments(tk.answer);
+    final parsed = msg.isError ? null : _parsed(msg);
+    final tk = (think: parsed?.think, answer: parsed?.answer ?? '');
+    final segs = parsed?.segs ?? const <Seg>[];
+    final generated = msg.attachments.where((a) => a.kind == AttachKind.image && a.path != null).toList();
     final files = segs.whereType<FileSeg>().where((f) => f.done && f.name.isNotEmpty).toList();
     final waiting = msg.streaming && msg.text.isEmpty;
 
@@ -330,6 +354,7 @@ class _AssistantBlock extends StatelessWidget {
                       ],
                     ),
                   ),
+            for (final g in generated) _GeneratedImage(att: g, actions: actions),
             if (files.length > 1)
               Padding(
                 padding: const EdgeInsets.only(top: 4, bottom: 6),
@@ -768,6 +793,53 @@ class _ThinkBlockState extends State<ThinkBlock> {
             ),
         ]),
       ),
+    );
+  }
+}
+
+
+/// A real raster image produced by the AI image generator, with a one-tap download.
+class _GeneratedImage extends StatelessWidget {
+  const _GeneratedImage({required this.att, required this.actions});
+  final Attachment att;
+  final MessageActions actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, bottom: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        GestureDetector(
+          onTap: () => actions.openImage(att.path!),
+          child: Hero(
+            tag: att.path!,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                decoration: BoxDecoration(border: Border.all(color: pal.border), borderRadius: BorderRadius.circular(20)),
+                child: Image.file(
+                  File(att.path!),
+                  fit: BoxFit.cover,
+                  cacheWidth: 900,
+                  errorBuilder: (_, __, ___) => Container(
+                    height: 200,
+                    color: pal.surface2,
+                    alignment: Alignment.center,
+                    child: Icon(Icons.broken_image_outlined, color: pal.dim, size: 36),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        FilledButton.tonalIcon(
+          onPressed: () => actions.saveGenerated(att),
+          icon: const Icon(Icons.download_rounded, size: 18),
+          label: const Text('Download image'),
+        ),
+      ]),
     );
   }
 }

@@ -1,3 +1,4 @@
+
 // CourseDeep AI — Supabase Edge Function (Deno)
 // Streams answers (NDJSON), races up to 11 providers with hedged fallback,
 // remembers which providers are rate-limited, searches the web with Tavily.
@@ -126,7 +127,7 @@ FILE CREATION: when the user asks you to create/export/generate a file (txt, md,
 <<<FILE: folder/name.ext>>>
 file content here
 <<<END FILE>>>
-Use several FILE blocks for several files (the app lets the user download them, or bundle them into a ZIP). Put a short explanation outside the blocks. Only use this for real files the user asked for. You cannot produce binary formats (png, pdf, docx) — offer a text-based alternative (svg, html, markdown, csv).`
+Use several FILE blocks for several files (the app lets the user download them, or bundle them into a ZIP). Put a short explanation outside the blocks. Only use this for real files the user asked for. You cannot write binary formats (pdf, docx) yourself — offer a text-based alternative (html, markdown, csv). Pictures, photos, logos and artwork are created by the app's built-in image generator when the user asks to generate/draw/create an image, so never answer such requests with SVG code unless the user explicitly asks for SVG or vector code. You can read web pages: when the user pastes a link, its text is provided to you as a numbered source.`
 }
 
 // ───────────────────────── web search ─────────────────────────
@@ -286,10 +287,183 @@ function race(cands: Cand[], hedgeMs: number, firstTokenMs: number, log: string[
 }
 
 
-async function generateImage(prompt: string): Promise<string> {
-  const encodedPrompt = encodeURIComponent(prompt);
-  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true`;
-  return url;
+// ───────────────────────── image generation (real PNG/JPEG, with automatic recycling) ─────────────────────────
+// Order: Gemini image -> Cloudflare FLUX -> Hugging Face FLUX -> Pollinations FLUX.
+// If one is out of quota / errors, the next one starts immediately (same recycling idea as the text AIs).
+const IMG_VERB = '(?:generate|create|make|draw|paint|design|render|produce|give me|show me|imagine|illustrate|sketch)'
+const IMG_NOUN = '(?:image|images|picture|pictures|photo|photos|illustration|artwork|wallpaper|portrait|poster|logo|banner|thumbnail|avatar|icon|painting|drawing|render|cover art|background)'
+const RE_IMG1 = new RegExp(`\\b${IMG_VERB}\\b[^.\\n]{0,40}\\b${IMG_NOUN}\\b`, 'i')
+const RE_IMG2 = /^\s*(draw|paint|sketch|illustrate)\b/i
+const RE_IMG_TEXT = /\b(svg|vector code|html|css|canvas|code|script|python|javascript|react|flutter|explain|how to|tutorial|prompt for)\b/i
+function wantsImage(t: string): boolean {
+  const q = t.trim()
+  if (q.length < 6 || q.length > 900) return false
+  if (RE_IMG_TEXT.test(q)) return false
+  return RE_IMG1.test(q) || RE_IMG2.test(q)
+}
+
+function polishPrompt(raw: string): string {
+  let t = raw.trim().replace(/\s+/g, ' ')
+  t = t.replace(/^(can|could|would|will) you (please )?/i, '').replace(/^please\s+/i, '')
+  t = t.replace(new RegExp(`^${IMG_VERB}\\s+(me\\s+)?(an?\\s+|the\\s+)?(${IMG_NOUN})?\\s*(of|for|with|about|that|showing)?\\s*`, 'i'), (m) => m.length < t.length ? '' : m)
+  if (t.length < 3) t = raw
+  const logo = /\blogo|icon|emblem|brand/i.test(raw)
+  const style = logo
+    ? 'professional modern logo design, clean minimal shapes, balanced composition, centered, crisp edges, on a plain background, high resolution'
+    : 'ultra detailed, high quality, professional, sharp focus, cinematic lighting, rich colors, 4k'
+  return `${t}, ${style}`.slice(0, 1500)
+}
+
+function toBase64(buf: Uint8Array): string {
+  let s = ''
+  const CH = 0x8000
+  for (let i = 0; i < buf.length; i += CH) s += String.fromCharCode(...buf.subarray(i, i + CH))
+  return btoa(s)
+}
+
+interface Img { data: string; mime: string }
+interface ImgProv { id: string; name: string; run: (prompt: string, signal: AbortSignal) => Promise<Img> }
+
+async function okImg(res: Response): Promise<Img> {
+  if (!res.ok) {
+    const ra = Number(res.headers.get('retry-after'))
+    throw new HttpErr(res.status, (await res.text().catch(() => '')).slice(0, 160), Number.isFinite(ra) && ra > 0 ? ra * 1000 : 0)
+  }
+  const mime = (res.headers.get('content-type') || '').split(';')[0].trim()
+  if (!mime.startsWith('image/')) throw new HttpErr(502, 'not an image: ' + mime)
+  const bytes = new Uint8Array(await res.arrayBuffer())
+  if (bytes.length < 2000) throw new HttpErr(502, 'image too small')
+  return { data: toBase64(bytes), mime }
+}
+
+function imageProviders(): ImgProv[] {
+  const L: ImgProv[] = []
+  if (env('GEMINI_API_KEY')) {
+    const m = env('MODEL_GEMINI_IMAGE') || 'gemini-2.5-flash-image'
+    L.push({
+      id: 'img-gemini:' + m, name: 'Gemini Image',
+      run: async (prompt, signal) => {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
+          method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env('GEMINI_API_KEY') },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } }),
+        })
+        if (!res.ok) throw new HttpErr(res.status, (await res.text().catch(() => '')).slice(0, 160))
+        const j = await res.json()
+        const part = (j.candidates?.[0]?.content?.parts ?? []).find((x: any) => x.inlineData?.data || x.inline_data?.data)
+        const d = part?.inlineData ?? part?.inline_data
+        if (!d?.data) throw new HttpErr(502, 'no image in reply')
+        return { data: d.data, mime: d.mimeType || d.mime_type || 'image/png' }
+      },
+    })
+  }
+  if (env('CLOUDFLARE_ACCOUNT_ID') && env('CLOUDFLARE_API_TOKEN')) {
+    const m = env('MODEL_CF_IMAGE') || '@cf/black-forest-labs/flux-1-schnell'
+    L.push({
+      id: 'img-cf:' + m, name: 'Cloudflare FLUX',
+      run: async (prompt, signal) => {
+        const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env('CLOUDFLARE_ACCOUNT_ID')}/ai/run/${m}`, {
+          method: 'POST', signal, headers: { Authorization: `Bearer ${env('CLOUDFLARE_API_TOKEN')}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: prompt.slice(0, 2000), steps: 8 }),
+        })
+        if (!res.ok) throw new HttpErr(res.status, (await res.text().catch(() => '')).slice(0, 160))
+        const j = await res.json()
+        const b64 = j?.result?.image
+        if (!b64) throw new HttpErr(502, 'no image in reply')
+        return { data: b64, mime: 'image/jpeg' }
+      },
+    })
+  }
+  if (env('HUGGINGFACE_API_KEY')) {
+    const m = env('MODEL_HF_IMAGE') || 'black-forest-labs/FLUX.1-schnell'
+    L.push({
+      id: 'img-hf:' + m, name: 'Hugging Face FLUX',
+      run: async (prompt, signal) =>
+        okImg(await fetch(`https://router.huggingface.co/hf-inference/models/${m}`, {
+          method: 'POST', signal, headers: { Authorization: `Bearer ${env('HUGGINGFACE_API_KEY')}`, 'Content-Type': 'application/json', Accept: 'image/png' },
+          body: JSON.stringify({ inputs: prompt }),
+        })),
+    })
+  }
+  // keyless last resort
+  L.push({
+    id: 'img-pollinations', name: 'Pollinations FLUX',
+    run: async (prompt, signal) =>
+      okImg(await fetch(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&model=flux&nologo=true&enhance=true&seed=${Math.floor(Math.random() * 1e6)}`, { signal })),
+  })
+  return L
+}
+
+async function makeImage(userText: string, emit: Emit, signal?: AbortSignal): Promise<{ img: Img; by: string; failed: number }> {
+  const prompt = polishPrompt(userText)
+  const all = imageProviders().filter(alive)
+  const order = [...all.filter(healthy), ...all.filter((p) => !healthy(p))]
+  let failed = 0
+  const log: string[] = []
+  for (const p of order) {
+    if (signal?.aborted) throw new Error('cancelled')
+    emit({ t: 'status', s: 'image', text: failed ? `Switching image AI - trying ${p.name}` : `Creating your image with ${p.name}` })
+    const ac = new AbortController()
+    const timer = setTimeout(() => ac.abort(), 38_000)
+    try {
+      const img = await p.run(prompt, ac.signal)
+      clearTimeout(timer)
+      return { img, by: p.name, failed }
+    } catch (e) {
+      clearTimeout(timer)
+      markFail(p.id, e)
+      failed++
+      log.push(`${p.name}: ${e instanceof HttpErr ? 'HTTP ' + e.status : ac.signal.aborted ? 'timeout' : String((e as Error).message).slice(0, 50)}`)
+    }
+  }
+  throw new Error(log.join(' | ') || 'no image provider available')
+}
+
+// ───────────────────────── reading links + extra search ─────────────────────────
+const PRIVATE_HOST = /^(localhost|0\.0\.0\.0|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1|.*\.internal$|.*\.local$)/i
+async function readPage(url: string): Promise<Src | null> {
+  try {
+    const u = new URL(url)
+    if (!/^https?:$/.test(u.protocol) || PRIVATE_HOST.test(u.hostname)) return null
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 6000)
+    try {
+      const r = await fetch(u.toString(), { signal: ctrl.signal, redirect: 'follow', headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CourseDeepBot/1.0)', Accept: 'text/html,text/plain' } })
+      if (!r.ok) return null
+      const ct = r.headers.get('content-type') || ''
+      if (!/text\/|json|xml/.test(ct)) return null
+      const html = (await r.text()).slice(0, 400_000)
+      const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || u.hostname).replace(/\s+/g, ' ').trim().slice(0, 140)
+      const text = html.replace(/<(script|style|noscript|svg|head)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim()
+      return { title, url: u.toString(), snippet: text.slice(0, 2500) }
+    } finally { clearTimeout(t) }
+  } catch { return null }
+}
+
+// Fallback web search (no key) when Tavily is missing, out of quota or returns nothing.
+async function ddg(query: string): Promise<Src[]> {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), 5000)
+  try {
+    const r = await fetch('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query.slice(0, 300)), {
+      signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36' },
+    })
+    if (!r.ok) return []
+    const html = await r.text()
+    const out: Src[] = []
+    const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(html)) && out.length < 5) {
+      let href = m[1].replace(/&amp;/g, '&')
+      const q = href.match(/[?&]uddg=([^&]+)/)
+      if (q) href = decodeURIComponent(q[1])
+      if (href.startsWith('//')) href = 'https:' + href
+      if (!/^https?:\/\//.test(href)) continue
+      const clean = (x: string) => x.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim()
+      out.push({ title: clean(m[2]).slice(0, 140) || href, url: href, snippet: clean(m[3]).slice(0, 500) })
+    }
+    return out
+  } catch { return [] } finally { clearTimeout(t) }
 }
 
 // ───────────────────────── pipeline ─────────────────────────
@@ -298,23 +472,22 @@ async function run(body: any, emit: Emit, signal?: AbortSignal) {
   const rawList: InMsg[] = Array.isArray(body.messages) ? body.messages : []
   const msgs = sanitize(rawList)
   
-  // IMAGE GENERATION CHECK
-  const lastUserMsg = msgs.filter(m => m.role === 'user').pop();
-  if (lastUserMsg) {
-    const text = lastUserMsg.text.toLowerCase();
-    if (text.includes('generate image') || text.includes('draw') || text.includes('make a picture') || text.includes('create an image')) {
-      emit({ t: 'status', s: 'thinking', text: 'Generating high-quality image...' });
-      try {
-        const imageUrl = await generateImage(lastUserMsg.text);
-        // Return a special markdown block that our Flutter app recognizes
-        emit({ t: 'delta', d: `\n\n![Generated Image](${imageUrl})\n\n` });
-        emit({ t: 'done', provider: 'Pollinations (Flux)', ms: Date.now() - t0 });
-        return;
-      } catch (e: any) {
-        emit({ t: 'error', message: 'Failed to generate image: ' + e.message });
-        return;
-      }
+  // IMAGE GENERATION: real raster image (JPEG/PNG) sent as one event; the app saves it and shows a Download button.
+  const lastUserMsg = msgs.filter((m) => m.role === 'user').pop()
+  if (lastUserMsg && !lastUserMsg.images.length && !lastUserMsg.files.length && wantsImage(String(([...rawList].reverse().find((m) => m?.role === 'user')?.content) ?? lastUserMsg.text))) {
+    const userText = String(([...rawList].reverse().find((m) => m?.role === 'user')?.content) ?? lastUserMsg.text)
+    emit({ t: 'status', s: 'image', text: 'Creating your image' })
+    try {
+      const { img, by, failed } = await makeImage(userText, emit, signal)
+      const ext = img.mime.includes('png') ? 'png' : img.mime.includes('webp') ? 'webp' : 'jpg'
+      emit({ t: 'image', name: `coursedeep-${Date.now()}.${ext}`, mime: img.mime, data: img.data })
+      emit({ t: 'delta', d: 'Here is your image. Tap it to view full screen, or press **Download image** to save it to your Downloads folder. Tell me what to change and I will make a new version.' })
+      emit({ t: 'done', provider: failed ? `${by} (auto-switched)` : by, ms: Date.now() - t0 })
+    } catch (e) {
+      if (signal?.aborted) return
+      emit({ t: 'error', message: 'All image generators are busy right now. Please try again in a minute.\n(' + String((e as Error).message).slice(0, 200) + ')' })
     }
+    return
   }
   const lastUser = [...msgs].reverse().find((m) => m.role === 'user')
   if (!lastUser) throw new Error('No message to answer.')
@@ -324,15 +497,25 @@ async function run(body: any, emit: Emit, signal?: AbortSignal) {
   const hasBinary = msgs.some((m) => m.images.length || m.files.length)
   const hasFileText = !!rawLast?.fileText
 
-  // 1) web search
+  // 0) links in the message are opened and read (Chrome-like access to any public page)
   let sources: Src[] = []
+  const urls = [...new Set((query.match(/https?:\/\/[^\s<>")\]]+/g) ?? []).map((u) => u.replace(/[.,;:!?]+$/, '')))].slice(0, 3)
+  if (urls.length && body.search !== false) {
+    emit({ t: 'status', s: 'reading', text: urls.length > 1 ? 'Opening your links' : 'Opening your link' })
+    const pages = (await Promise.all(urls.map(readPage))).filter((x): x is Src => !!x)
+    sources.push(...pages)
+  }
+
+  // 1) web search
   if (wantsSearch(query, body.search, hasFileText || hasBinary)) {
     emit({ t: 'status', s: 'searching', text: 'Searching the web' })
-    sources = await tavily(query)
-    if (sources.length) {
-      emit({ t: 'sources', sources: sources.map(({ title, url }) => ({ title, url })) })
-      emit({ t: 'status', s: 'reading', text: `Reading ${sources.length} sources` })
-    }
+    let found = await tavily(query)
+    if (!found.length) found = await ddg(query)
+    sources.push(...found)
+  }
+  if (sources.length) {
+    emit({ t: 'sources', sources: sources.map(({ title, url }) => ({ title, url })) })
+    emit({ t: 'status', s: 'reading', text: `Reading ${sources.length} sources` })
   }
   if (signal?.aborted) return
 
@@ -455,13 +638,15 @@ Deno.serve(async (req) => {
   // non-streaming mode (PHP gateway / simple clients)
   if (body.stream === false) {
     let reply = '', provider = '', sources: Src[] = []
+    const images: unknown[] = []
     try {
       await run(body, (o) => {
         if (o.t === 'delta') reply += o.d
         else if (o.t === 'sources') sources = o.sources as Src[]
+        else if (o.t === 'image') images.push({ name: o.name, data: o.data })
         else if (o.t === 'done') provider = String(o.provider)
       })
-      return json({ reply, sources, provider })
+      return json({ reply, sources, provider, images })
     } catch (e) { return json({ error: friendly((e as Error).message) }, 502) }
   }
 
@@ -476,4 +661,3 @@ Deno.serve(async (req) => {
   })
   return new Response(stream, { headers: { ...CORS, 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } })
 })
-

@@ -1,8 +1,9 @@
+
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,7 +13,9 @@ import '../services/ai_service.dart';
 import '../services/app_settings.dart';
 import '../services/chat_store.dart';
 import '../services/file_service.dart';
-import 'package:better_download_saver/better_download_saver.dart';
+import '../services/download_service.dart';
+import '../widgets/home_view.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import '../theme/app_theme.dart';
 import '../util/segments.dart';
 import '../widgets/brand.dart';
@@ -58,7 +61,7 @@ class _ChatPageState extends State<ChatPage> {
     regenerate: _regenerate,
     openImage: _openImage,
     more: _moreSheet,
-    downloadImage: _downloadImage,
+    saveGenerated: _saveGenerated,
     shareFile: _shareFile,
     shareImage: _shareImage,
     shareZip: _shareZip,
@@ -75,6 +78,12 @@ class _ChatPageState extends State<ChatPage> {
 
   void _onSettings() {
     if (mounted) setState(() {});
+  }
+
+  String get _userName {
+    final e = Supabase.instance.client.auth.currentUser?.email ?? '';
+    final n = e.split('@').first.replaceAll(RegExp(r'[._\-0-9]+'), ' ').trim();
+    return n.isEmpty ? '' : n[0].toUpperCase() + n.substring(1).split(' ').first;
   }
 
   bool get _isDark => AppSettings.I.isDark(context);
@@ -167,7 +176,12 @@ class _ChatPageState extends State<ChatPage> {
   void _onScroll() {
     if (!_scroll.hasClients) return;
     final d = _scroll.position.maxScrollExtent - _scroll.position.pixels;
-    _stick = d < 140;
+    // Only the USER scrolling up stops auto-follow (a big new chunk of text must not).
+    if (d < 60) {
+      _stick = true;
+    } else if (_scroll.position.userScrollDirection == ScrollDirection.forward) {
+      _stick = false;
+    }
     final show = d > 360;
     if (_showJump.value != show) _showJump.value = show;
   }
@@ -311,7 +325,7 @@ class _ChatPageState extends State<ChatPage> {
     _req = req;
     _dirty = false;
     _flush?.cancel();
-    _flush = Timer.periodic(const Duration(milliseconds: 80), (_) {
+    _flush = Timer.periodic(const Duration(milliseconds: 100), (_) {
       if (!_dirty) return;
       _dirty = false;
       reply.update();
@@ -330,6 +344,13 @@ class _ChatPageState extends State<ChatPage> {
             break;
           case 'delta':
             reply.append(e.text);
+            break;
+          case 'image':
+            try {
+              final bytes = base64Decode(e.data);
+              final f = await FileService.storeImageBytes(bytes, e.name);
+              reply.attachments.add(Attachment(name: e.name, kind: AttachKind.image, mime: DownloadService.mimeOf(e.name), path: f.path, size: bytes.length));
+            } catch (_) {}
             break;
           case 'done':
             reply.provider = e.provider;
@@ -430,36 +451,27 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _shareImage(ImageSeg img) async {
     try {
-      await FileService.saveImage(img);
-      _toast('Image saved to Downloads!');
+      final where = await FileService.saveImage(img);
+      _toast('Saved to $where');
     } catch (e) {
       _toast('Could not save image.');
     }
   }
 
 
-  Future<void> _downloadImage(String url) async {
+  Future<void> _saveGenerated(Attachment a) async {
     try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final saver = BetterDownloadSaver();
-        await saver.saveToDownloads(
-          fileName: 'coursedeep_image_${DateTime.now().millisecondsSinceEpoch}.jpg',
-          bytes: response.bodyBytes,
-        );
-        _toast('Image saved to Downloads!');
-      } else {
-        _toast('Failed to download image.');
-      }
+      final where = await FileService.saveGeneratedImage(a.path!, a.name);
+      _toast('Saved to $where');
     } catch (e) {
-      _toast('Error: $e');
+      _toast('Could not save the image.');
     }
   }
 
   Future<void> _shareFile(FileSeg f) async {
     try {
-      await FileService.saveFile(f);
-      _toast('File saved to Downloads!');
+      final where = await FileService.saveFile(f);
+      _toast('Saved to $where');
     } catch (e) {
       _toast('Could not share this file.');
     }
@@ -467,8 +479,8 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _shareZip(List<FileSeg> files) async {
     try {
-      await FileService.saveZip(files);
-      _toast('ZIP saved to Downloads!');
+      final where = await FileService.saveZip(files);
+      _toast('Saved to $where');
     } catch (e) {
       _toast('Could not create the ZIP.');
     }
@@ -590,12 +602,13 @@ class _ChatPageState extends State<ChatPage> {
               child: !_loaded
                   ? const Center(child: SizedBox(width: 26, height: 26, child: CircularProgressIndicator(strokeWidth: 2.5)))
                   : messages.isEmpty
-                      ? _EmptyState(onPick: _send)
+                      ? HomeView(onPick: _send, name: _userName)
                       : Stack(children: [
                           ListView.builder(
                             controller: _scroll,
                             physics: const ClampingScrollPhysics(),
                             addAutomaticKeepAlives: false,
+                            cacheExtent: 900,
                             padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                             itemCount: messages.length,
                             itemBuilder: (_, i) => MessageView(
@@ -827,68 +840,3 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 }
-
-// ───────────────────────── empty state ─────────────────────────
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.onPick});
-  final void Function([String? preset]) onPick;
-
-  static const _items = <(IconData, String, String)>[
-    (Icons.travel_explore_rounded, 'Latest news', "What's the latest tech news today?"),
-    (Icons.school_outlined, 'Study helper', 'Explain photosynthesis simply, then quiz me'),
-    (Icons.code_rounded, 'Make a file', 'Create a simple HTML landing page and give me the file'),
-    (Icons.event_note_outlined, 'Plan', 'Make me a weekly study schedule'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = Pal.of(context);
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const AiOrb(size: 72),
-          const SizedBox(height: 2),
-          ShaderMask(
-            shaderCallback: (r) => Brand.gradient.createShader(r),
-            child: const Text('Hi, I\'m CourseDeep', style: TextStyle(fontSize: 29, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.6)),
-          ),
-          const SizedBox(height: 8),
-          Text('How can I help you today?\nSearch the web · read images · analyse files · create files', textAlign: TextAlign.center, style: TextStyle(color: pal.dim, fontSize: 13.5)),
-          const SizedBox(height: 26),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 1.55,
-            children: [
-              for (final it in _items)
-                Material(
-                  color: pal.surface,
-                  borderRadius: BorderRadius.circular(20),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(20),
-                    onTap: () => onPick(it.$3),
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), border: Border.all(color: pal.border)),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Icon(it.$1, color: Theme.of(context).colorScheme.primary, size: 24),
-                        const Spacer(),
-                        Text(it.$2, style: TextStyle(color: pal.text, fontWeight: FontWeight.w700, fontSize: 14.5)),
-                        const SizedBox(height: 2),
-                        Text(it.$3, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: pal.dim, fontSize: 11.5, height: 1.25)),
-                      ]),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ]),
-      ),
-    );
-  }
-}
-

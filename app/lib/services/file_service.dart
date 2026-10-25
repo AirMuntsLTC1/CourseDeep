@@ -1,10 +1,11 @@
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:better_download_saver/better_download_saver.dart';
+import 'download_service.dart';
 import '../models/chat_message.dart';
 import '../util/segments.dart';
 import 'native_service.dart';
@@ -240,24 +241,15 @@ class FileService {
 
   // ───────────── files created BY the AI ─────────────
 
-  static Future<void> saveFile(FileSeg f) async {
-    final saver = BetterDownloadSaver();
-    await saver.saveToDownloads(
-      fileName: f.name,
-      bytes: Uint8List.fromList(utf8.encode(f.content)),
-    );
-  }
+  static Future<String> saveFile(FileSeg f) =>
+      DownloadService.save(f.name, Uint8List.fromList(utf8.encode(f.content)));
 
-  static Future<void> saveImage(ImageSeg img) async {
-    final saver = BetterDownloadSaver();
-    await saver.saveToDownloads(
-      fileName: img.name,
-      bytes: Uint8List.fromList(utf8.encode(img.content)),
-    );
-  }
+  /// SVG text blocks written by the AI.
+  static Future<String> saveImage(ImageSeg img) =>
+      DownloadService.save(img.name, Uint8List.fromList(utf8.encode(img.content)));
 
   /// Several files are bundled into one ZIP (keeps folders).
-  static Future<void> saveZip(List<FileSeg> files, {String name = 'coursedeep-files.zip'}) async {
+  static Future<String> saveZip(List<FileSeg> files, {String name = 'coursedeep-files.zip'}) async {
     final arc = Archive();
     for (final f in files) {
       final clean = f.name.replaceAll('\\', '/').split('/').where((s) => s.isNotEmpty && s != '..' && s != '.').join('/');
@@ -265,11 +257,16 @@ class FileService {
       arc.addFile(ArchiveFile.bytes(clean.isEmpty ? 'file.txt' : clean, Uint8List.fromList(bytes)));
     }
     final data = ZipEncoder().encode(arc);
-    final saver = BetterDownloadSaver();
-    await saver.saveToDownloads(
-      fileName: name,
-      bytes: Uint8List.fromList(data),
-    );
+    return DownloadService.save(name, Uint8List.fromList(data), mime: 'application/zip');
+  }
+
+  /// Images produced by the AI image generator (stored in the app folder).
+  static Future<String> saveGeneratedImage(String path, String name) => DownloadService.saveFromPath(path, name: name);
+
+  /// Stores base64 image bytes from the server in the app folder and returns the file.
+  static Future<File> storeImageBytes(Uint8List bytes, String name) async {
+    final d = await _dir('attachments');
+    final f = File(p.join(d.path, '${DateTime.now().microsecondsSinceEpoch}_${_safe(name)}'));
+    return f.writeAsBytes(bytes, flush: true);
   }
 }
-

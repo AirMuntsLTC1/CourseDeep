@@ -7,115 +7,87 @@ import 'services/app_settings.dart';
 import 'services/native_service.dart';
 import 'services/update_service.dart';
 import 'theme/app_theme.dart';
-import 'widgets/brand.dart';
 
 const String _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const String _supabasePublishableKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
 
-void main() {
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Show our own logo screen on the very first frame; load everything behind it.
-  runApp(const _Boot());
+
+  final configured = _supabaseUrl.startsWith('https://') && _supabasePublishableKey.isNotEmpty;
+
+  // Supabase and the saved settings load in parallel.
+  await Future.wait([
+    if (configured) Supabase.initialize(url: _supabaseUrl, publishableKey: _supabasePublishableKey),
+    AppSettings.I.load(),
+  ]);
+
+  NativeService().init(); // load libcoursedeep.so (C++)
+  AiService.warmUp(); // free ping: wakes the edge function, uses no AI quota
+  runApp(CourseDeepApp(supabaseConfigured: configured));
 }
 
-class _Boot extends StatefulWidget {
-  const _Boot();
+class CourseDeepApp extends StatefulWidget {
+  const CourseDeepApp({super.key, required this.supabaseConfigured});
+  final bool supabaseConfigured;
   @override
-  State<_Boot> createState() => _BootState();
+  State<CourseDeepApp> createState() => _CourseDeepAppState();
 }
 
-class _BootState extends State<_Boot> {
-  bool? _configured;
-
+class _CourseDeepAppState extends State<CourseDeepApp> {
   @override
   void initState() {
     super.initState();
-    _init();
-  }
-
-  Future<void> _init() async {
-    final configured = _supabaseUrl.startsWith('https://') && _supabasePublishableKey.isNotEmpty;
-    await Future.wait([
-      AppSettings.I.load(),
-      if (configured) Supabase.initialize(url: _supabaseUrl, publishableKey: _supabasePublishableKey),
-    ]);
-    NativeService().init(); // load libcoursedeep.so (C++)
-    AiService.warmUp(); // free ping: wakes the edge function, uses no AI quota
-    if (mounted) setState(() => _configured = configured);
+    // Old version of the app? Show the blocking update dialog (works on top of login and chat).
+    WidgetsBinding.instance.addPostFrameCallback((_) => UpdateService.checkAndShow(navigatorKey));
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = _configured;
-    if (c != null) return CourseDeepApp(supabaseConfigured: c);
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        backgroundColor: Color(0xFF0B0B12),
-        body: Center(child: AiOrb(size: 96)),
-      ),
-    );
-  }
-}
-
-class CourseDeepApp extends StatelessWidget {
-  const CourseDeepApp({super.key, required this.supabaseConfigured});
-  final bool supabaseConfigured;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AppSettings.I;
     return ListenableBuilder(
-      listenable: s,
+      listenable: AppSettings.I,
       builder: (context, _) => MaterialApp(
         title: 'CourseDeep',
+        navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         theme: buildTheme(Brightness.light),
         darkTheme: buildTheme(Brightness.dark),
-        themeMode: s.themeMode,
-        themeAnimationDuration: const Duration(milliseconds: 160),
-        home: _AuthGate(configured: supabaseConfigured),
+        themeMode: AppSettings.I.themeMode,
+        home: _CourseDeepAuthGate(configured: widget.supabaseConfigured),
       ),
     );
   }
 }
 
-class _AuthGate extends StatelessWidget {
-  const _AuthGate({required this.configured});
+class _CourseDeepAuthGate extends StatelessWidget {
+  const _CourseDeepAuthGate({required this.configured});
   final bool configured;
 
   @override
   Widget build(BuildContext context) {
     if (!configured) {
-      final pal = Pal.of(context);
       return Scaffold(
         body: Center(
           child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const AiMark(size: 64),
-              const SizedBox(height: 18),
-              Text('CourseDeep is not configured',
-                  style: TextStyle(color: pal.text, fontSize: 20, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              Text(
-                'This build has no Supabase settings. Add the SUPABASE_PUBLISHABLE_KEY secret in GitHub '
-                '(Settings → Secrets → Actions) and run the build again.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: pal.dim, height: 1.5),
-              ),
-            ]),
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'CourseDeep is not configured for Supabase. '
+              'Check the SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY '
+              'build settings, then rebuild the app.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
           ),
         ),
       );
     }
 
-    final auth = Supabase.instance.client.auth;
     return StreamBuilder<AuthState>(
-      stream: auth.onAuthStateChange,
-      initialData: AuthState(AuthChangeEvent.initialSession, auth.currentSession),
-      builder: (context, snap) {
-        final session = snap.data?.session ?? auth.currentSession;
+      stream: Supabase.instance.client.auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        final session = Supabase.instance.client.auth.currentSession;
         if (session != null) return const ChatPage();
         return const EmailCodeLoginPage();
       },

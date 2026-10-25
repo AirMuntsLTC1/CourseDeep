@@ -1,3 +1,4 @@
+
 name: Build CourseDeep APK
 
 on:
@@ -64,6 +65,18 @@ jobs:
             native/coursedeep.cpp \
             -o app/android/app/src/main/jniLibs/arm64-v8a/libcoursedeep.so
           file app/android/app/src/main/jniLibs/arm64-v8a/libcoursedeep.so
+
+      # Native Android downloader: saves straight into the public Downloads folder (MediaStore),
+      # no share sheet, no Bluetooth. Dart side: app/lib/services/download_service.dart
+      - name: Install native downloader (MainActivity.kt)
+        run: |
+          KT=$(find app/android/app/src/main -name MainActivity.kt | head -n1)
+          if [ -z "$KT" ]; then KT=$(find app/android/app/src/main -name MainActivity.java | head -n1); fi
+          PKG=$(grep -m1 '^package ' "$KT" | sed 's/package //; s/;//' | tr -d '[:space:]')
+          DIR=$(dirname "$KT")
+          rm -f "$DIR"/MainActivity.java "$DIR"/MainActivity.kt
+          sed "s/__PACKAGE__/$PKG/" native/MainActivity.kt.tpl > "$DIR/MainActivity.kt"
+          echo "MainActivity.kt written for package $PKG"
 
       # Same signing key on every build => the new APK installs OVER the old app (no uninstall).
       # Create the secret once: see README ("Stable signing key").

@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -15,8 +16,10 @@ class AiException implements Exception {
 }
 
 class AiEvent {
-  AiEvent(this.type, {this.text = '', this.sources = const [], this.provider = ''});
-  final String type; // status | sources | delta | done
+  AiEvent(this.type, {this.text = '', this.sources = const [], this.provider = '', this.data = '', this.name = ''});
+  final String type; // status | sources | delta | image | done
+  final String data; // base64 image bytes (type == image)
+  final String name;
   final String text;
   final List<Source> sources;
   final String provider;
@@ -119,7 +122,7 @@ class AiRequest {
       final lines = resp.stream
           .transform(utf8.decoder)
           .transform(const LineSplitter())
-          .timeout(const Duration(seconds: 45), onTimeout: (sink) {
+          .timeout(const Duration(seconds: 100), onTimeout: (sink) {
             sink.addError(TimeoutException('stalled'));
             sink.close();
           });
@@ -142,6 +145,10 @@ class AiRequest {
           case 'delta':
             gotData = true;
             yield AiEvent('delta', text: j['d']?.toString() ?? '');
+            break;
+          case 'image':
+            gotData = true;
+            yield AiEvent('image', data: j['data']?.toString() ?? '', name: j['name']?.toString() ?? 'image.jpg');
             break;
           case 'done':
             yield AiEvent('done', provider: j['provider']?.toString() ?? '');
@@ -178,6 +185,9 @@ class AiRequest {
       if (r.statusCode != 200 || d['error'] != null) throw AiException(d['error']?.toString() ?? 'Backup route failed (HTTP ${r.statusCode}).');
       final src = (d['sources'] as List? ?? []).map((e) => Source.fromJson(Map<String, dynamic>.from(e as Map))).toList();
       if (src.isNotEmpty) yield AiEvent('sources', sources: src);
+      for (final im in (d['images'] as List? ?? [])) {
+        yield AiEvent('image', data: (im as Map)['data']?.toString() ?? '', name: im['name']?.toString() ?? 'image.jpg');
+      }
       yield AiEvent('delta', text: d['reply']?.toString() ?? '');
       yield AiEvent('done', provider: d['provider']?.toString() ?? 'Backup');
     } on AiException {
@@ -189,4 +199,3 @@ class AiRequest {
     }
   }
 }
-

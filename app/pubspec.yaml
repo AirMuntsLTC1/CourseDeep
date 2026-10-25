@@ -1,12 +1,12 @@
+
 name: coursedeep
 description: CourseDeep - AI assistant with web search, vision and file tools
 publish_to: 'none'
-version: 2.1.0+4
+version: 2.3.0+7
 environment:
   sdk: ">=3.0.0 <4.0.0"
 dependencies:
   archive: ^4.5.2
-  better_download_saver: ^0.0.1
   ota_update: ^5.1.0
   package_info_plus: ^10.2.2
   flutter_svg: ^2.0.10
@@ -30,4 +30,3 @@ dev_dependencies:
   flutter_lints: ^4.0.0
 flutter:
   uses-material-design: true
-
