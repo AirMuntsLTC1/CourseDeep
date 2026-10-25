@@ -106,10 +106,10 @@ function fit(msgs: Msg[], maxChars: number): Msg[] {
   return res
 }
 
-function buildSystem(hasSources: boolean, hasBinary: boolean): string {
+function buildSystem(hasSources: boolean, hasBinary: boolean, lang = '', think = false): string {
   const date = new Date().toUTCString().slice(0, 16)
   return `You are CourseDeep, a fast, friendly and accurate AI assistant. Today is ${date}.
-Reply in the same language the user writes in. Be clear and well structured; use Markdown (short headings, lists, tables, fenced code blocks with a language tag). Be concise unless the user wants depth. Say so honestly when unsure.
+${lang && lang !== 'English' ? `Always reply in ${lang} unless the user clearly writes in another language.` : 'Reply in the same language the user writes in.'}\n${think ? 'DEEP THINK MODE: reason carefully step by step before answering. Start with a short section titled "**Thinking**" (max 8 lines) where you plan and double-check, then a line with --- and the final answer.' : ''} Be clear and well structured; use Markdown (short headings, lists, tables, fenced code blocks with a language tag). Be concise unless the user wants depth. Say so honestly when unsure.
 ${hasBinary ? 'You can see attached images and documents — describe and analyse them carefully and concretely.' : ''}
 ${hasSources ? 'Web search results are provided below. Use them for current facts and cite them inline as [1], [2] matching the source numbers. Never invent sources.' : ''}
 FILE CREATION: when the user asks you to create/export/generate a file (txt, md, csv, json, html, code, svg, yaml, a project as zip, …) output EACH file exactly like this and nothing else inside:
@@ -297,7 +297,7 @@ async function run(body: any, emit: Emit, signal?: AbortSignal) {
   if (signal?.aborted) return
 
   // 2) system prompt (+ search context)
-  let system = buildSystem(sources.length > 0, hasBinary)
+  let system = buildSystem(sources.length > 0, hasBinary, String(body.lang || '').slice(0, 24), body.think === true)
   if (sources.length) system += '\n\nSEARCH RESULTS:\n' + sources.map((s, i) => `[${i + 1}] ${s.title}\n${s.url}\n${s.snippet ?? ''}`).join('\n\n')
 
   // 3) choose providers
@@ -388,3 +388,4 @@ Deno.serve(async (req) => {
   })
   return new Response(stream, { headers: { ...CORS, 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } })
 })
+

@@ -268,3 +268,4 @@ class FileService {
     await SharePlus.instance.share(ShareParams(files: [XFile(z.path)], text: name));
   }
 }
+

@@ -6,9 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/chat_message.dart';
 import '../services/ai_service.dart';
+import '../services/app_settings.dart';
 import '../services/chat_store.dart';
 import '../services/file_service.dart';
 import '../theme/app_theme.dart';
@@ -22,9 +22,7 @@ import 'settings_page.dart';
 const int _kMaxAttachments = 6;
 
 class ChatPage extends StatefulWidget {
-  const ChatPage({super.key, required this.isDark, required this.onToggleTheme});
-  final bool isDark;
-  final VoidCallback onToggleTheme;
+  const ChatPage({super.key});
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -43,9 +41,9 @@ class _ChatPageState extends State<ChatPage> {
   ChatSession? _current;
   bool _loaded = false;
   bool _busy = false;
-  bool _search = true;
+  bool _search = AppSettings.I.searchDefault;
+  bool _think = AppSettings.I.thinkDefault;
   bool _stick = true; // auto-scroll only while the user is at the bottom
-  double _fontSize = 16.5;
   final List<Attachment> _pending = [];
 
   AiRequest? _req;
@@ -67,12 +65,20 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
+    AppSettings.I.addListener(_onSettings);
     _load();
-    _loadFontSize();
   }
+
+  void _onSettings() {
+    if (mounted) setState(() {});
+  }
+
+  bool get _isDark => AppSettings.I.isDark(context);
+  void _toggleTheme() => AppSettings.I.toggleTheme(context);
 
   @override
   void dispose() {
+    AppSettings.I.removeListener(_onSettings);
     _req?.cancel();
     _flush?.cancel();
     _input.dispose();
@@ -80,18 +86,6 @@ class _ChatPageState extends State<ChatPage> {
     _scroll.dispose();
     _showJump.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadFontSize() async {
-    final p = await SharedPreferences.getInstance();
-    final size = p.getDouble('ai_font_size');
-    if (size != null && mounted) setState(() => _fontSize = size);
-  }
-
-  Future<void> _setFontSize(double size) async {
-    setState(() => _fontSize = size);
-    final p = await SharedPreferences.getInstance();
-    await p.setDouble('ai_font_size', size);
   }
 
   // ───────────────────────── data ─────────────────────────
@@ -283,7 +277,7 @@ class _ChatPageState extends State<ChatPage> {
     final atts = _pending.where((a) => !a.failed).toList();
     if (text.isEmpty && atts.isEmpty) return;
 
-    HapticFeedback.selectionClick();
+    haptic(HapticFeedback.selectionClick);
     final s = _current ?? _newSession();
     if (s.messages.isEmpty) {
       s.title = text.isNotEmpty ? (text.length > 42 ? '${text.substring(0, 42)}…' : text) : (atts.first.name);
@@ -313,7 +307,7 @@ class _ChatPageState extends State<ChatPage> {
     _req = req;
     _dirty = false;
     _flush?.cancel();
-    _flush = Timer.periodic(const Duration(milliseconds: 40), (_) {
+    _flush = Timer.periodic(const Duration(milliseconds: 80), (_) {
       if (!_dirty) return;
       _dirty = false;
       reply.update();
@@ -322,7 +316,7 @@ class _ChatPageState extends State<ChatPage> {
 
     String? failure;
     try {
-      await for (final e in req.run(history, search: _search)) {
+      await for (final e in req.run(history, search: _search, think: _think, lang: AppSettings.I.language)) {
         switch (e.type) {
           case 'status':
             reply.status = e.text;
@@ -371,12 +365,12 @@ class _ChatPageState extends State<ChatPage> {
     if (mounted) {
       setState(() => _busy = false);
       _jumpIfStuck();
-      HapticFeedback.lightImpact();
+      haptic(HapticFeedback.lightImpact);
     }
   }
 
   void _stop() {
-    HapticFeedback.mediumImpact();
+    haptic(HapticFeedback.mediumImpact);
     _req?.cancel();
   }
 
@@ -405,7 +399,7 @@ class _ChatPageState extends State<ChatPage> {
 
   void _copy(String text) {
     Clipboard.setData(ClipboardData(text: text));
-    HapticFeedback.lightImpact();
+    haptic(HapticFeedback.lightImpact);
     _toast('Copied');
   }
 
@@ -526,10 +520,14 @@ class _ChatPageState extends State<ChatPage> {
       context,
       MaterialPageRoute(
         builder: (_) => SettingsPage(
-          isDark: widget.isDark,
-          onToggleTheme: widget.onToggleTheme,
-          fontSize: _fontSize,
-          onFontSizeChanged: _setFontSize,
+          onChatsCleared: () {
+            if (!mounted) return;
+            setState(() {
+              _sessions.clear();
+              _current = null;
+              _pending.clear();
+            });
+          },
         ),
       ),
     );
@@ -562,6 +560,9 @@ class _ChatPageState extends State<ChatPage> {
                       : Stack(children: [
                           ListView.builder(
                             controller: _scroll,
+                            physics: const ClampingScrollPhysics(),
+                            addAutomaticKeepAlives: false,
+                            cacheExtent: 900,
                             padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                             itemCount: messages.length,
                             itemBuilder: (_, i) => MessageView(
@@ -569,7 +570,7 @@ class _ChatPageState extends State<ChatPage> {
                               msg: messages[i],
                               isLast: i == messages.length - 1,
                               actions: _actions,
-                              fontSize: _fontSize,
+                              fontSize: AppSettings.I.fontSize,
                             ),
                           ),
                           Positioned(
@@ -607,7 +608,9 @@ class _ChatPageState extends State<ChatPage> {
               busy: _busy,
               attachments: _pending,
               searchOn: _search,
+              thinkOn: _think,
               onToggleSearch: () => setState(() => _search = !_search),
+              onToggleThink: () => setState(() => _think = !_think),
               onAttach: _attach,
               onSend: () => _send(),
               onStop: _stop,
@@ -640,9 +643,9 @@ class _ChatPageState extends State<ChatPage> {
           icon: AnimatedSwitcher(
             duration: const Duration(milliseconds: 250),
             transitionBuilder: (c, a) => RotationTransition(turns: a, child: FadeTransition(opacity: a, child: c)),
-            child: Icon(widget.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, key: ValueKey(widget.isDark), color: pal.text, size: 22),
+            child: Icon(_isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, key: ValueKey(_isDark), color: pal.text, size: 22),
           ),
-          onPressed: widget.onToggleTheme,
+          onPressed: _toggleTheme,
         ),
       ]),
     );
@@ -770,9 +773,9 @@ class _ChatPageState extends State<ChatPage> {
                 Expanded(
                   child: ListTile(
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    leading: Icon(widget.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: pal.text),
-                    title: Text(widget.isDark ? 'Light mode' : 'Dark mode', style: TextStyle(color: pal.text)),
-                    onTap: widget.onToggleTheme,
+                    leading: Icon(_isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: pal.text),
+                    title: Text(_isDark ? 'Light mode' : 'Dark mode', style: TextStyle(color: pal.text)),
+                    onTap: _toggleTheme,
                   ),
                 ),
                 IconButton(
@@ -811,14 +814,14 @@ class _EmptyState extends StatelessWidget {
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const AiOrb(size: 84),
-          const SizedBox(height: 4),
+          const AiOrb(size: 72),
+          const SizedBox(height: 2),
           ShaderMask(
             shaderCallback: (r) => Brand.gradient.createShader(r),
-            child: const Text('How can I help?', style: TextStyle(fontSize: 29, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.6)),
+            child: const Text('Hi, I\'m CourseDeep', style: TextStyle(fontSize: 29, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.6)),
           ),
           const SizedBox(height: 8),
-          Text('Search the web · read images · analyse files · create files', textAlign: TextAlign.center, style: TextStyle(color: pal.dim, fontSize: 13.5)),
+          Text('How can I help you today?\nSearch the web · read images · analyse files · create files', textAlign: TextAlign.center, style: TextStyle(color: pal.dim, fontSize: 13.5)),
           const SizedBox(height: 26),
           GridView.count(
             shrinkWrap: true,
@@ -855,3 +858,4 @@ class _EmptyState extends StatelessWidget {
     );
   }
 }
+

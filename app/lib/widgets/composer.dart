@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/chat_message.dart';
 import '../theme/app_theme.dart';
+import '../services/app_settings.dart';
 import 'message_view.dart';
 
 enum AttachChoice { photo, camera, file }
@@ -45,7 +46,9 @@ class Composer extends StatelessWidget {
     required this.busy,
     required this.attachments,
     required this.searchOn,
+    required this.thinkOn,
     required this.onToggleSearch,
+    required this.onToggleThink,
     required this.onAttach,
     required this.onSend,
     required this.onStop,
@@ -56,8 +59,8 @@ class Composer extends StatelessWidget {
   final FocusNode focus;
   final bool busy;
   final List<Attachment> attachments;
-  final bool searchOn;
-  final VoidCallback onToggleSearch, onAttach, onSend, onStop;
+  final bool searchOn, thinkOn;
+  final VoidCallback onToggleSearch, onToggleThink, onAttach, onSend, onStop;
   final void Function(Attachment) onRemove;
 
   @override
@@ -117,12 +120,17 @@ class Composer extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
             child: Row(children: [
               _RoundBtn(icon: Icons.add_rounded, tip: 'Attach', onTap: () {
-                HapticFeedback.selectionClick();
+                haptic(HapticFeedback.selectionClick);
                 onAttach();
               }),
               const SizedBox(width: 6),
-              _SearchChip(on: searchOn, onTap: () {
-                HapticFeedback.selectionClick();
+              _ToggleChip(icon: Icons.psychology_alt_outlined, label: 'DeepThink', on: thinkOn, onTap: () {
+                haptic(HapticFeedback.selectionClick);
+                onToggleThink();
+              }),
+              const SizedBox(width: 6),
+              _ToggleChip(icon: Icons.public_rounded, label: 'Search', on: searchOn, onTap: () {
+                haptic(HapticFeedback.selectionClick);
                 onToggleSearch();
               }),
               const Spacer(),
@@ -193,8 +201,10 @@ class _RoundBtn extends StatelessWidget {
   }
 }
 
-class _SearchChip extends StatelessWidget {
-  const _SearchChip({required this.on, required this.onTap});
+class _ToggleChip extends StatelessWidget {
+  const _ToggleChip({required this.icon, required this.label, required this.on, required this.onTap});
+  final IconData icon;
+  final String label;
   final bool on;
   final VoidCallback onTap;
   @override
@@ -213,11 +223,12 @@ class _SearchChip extends StatelessWidget {
           border: Border.all(color: on ? cs.primary.withValues(alpha: 0.5) : Colors.transparent),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.public_rounded, size: 18, color: on ? cs.primary : pal.dim),
+          Icon(icon, size: 18, color: on ? cs.primary : pal.dim),
           const SizedBox(width: 6),
-          Text('Search', style: TextStyle(color: on ? cs.primary : pal.dim, fontSize: 13.5, fontWeight: FontWeight.w600)),
+          Text(label, style: TextStyle(color: on ? cs.primary : pal.dim, fontSize: 13.5, fontWeight: FontWeight.w600)),
         ]),
       ),
     );
   }
 }
+

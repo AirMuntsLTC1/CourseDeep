@@ -135,3 +135,4 @@ class ChatSession {
         messages: (j['messages'] as List? ?? []).map((e) => ChatMessage.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
       );
 }
+

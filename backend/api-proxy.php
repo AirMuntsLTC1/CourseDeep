@@ -59,3 +59,4 @@ curl_close($ch);
 if ($resp === false) fail(502, 'Upstream unreachable: ' . $err);
 http_response_code($code ?: 502);
 echo $resp;
+

@@ -33,3 +33,4 @@ CD_EXPORT size_t coursedeep_squeeze(const uint8_t* in, size_t n, uint8_t* out) {
 CD_EXPORT int32_t coursedeep_estimate_tokens(size_t chars) { return (int32_t)((chars + 3) / 4); }
 
 CD_EXPORT const char* coursedeep_version() { return "CourseDeep-native-2.0"; }
+

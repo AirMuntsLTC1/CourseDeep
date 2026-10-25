@@ -85,3 +85,4 @@ class NativeService {
     return _ok ? _tokens(chars) : (chars + 3) ~/ 4;
   }
 }
+

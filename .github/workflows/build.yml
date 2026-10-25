@@ -40,6 +40,15 @@ jobs:
             flutter create --platforms=android --project-name coursedeep --org com.coursedeep .
           fi
 
+      - name: Apply the CourseDeep logo + dark splash (replaces every Flutter icon)
+        run: |
+          RES=app/android/app/src/main/res
+          cp -r branding/android-res/. "$RES/"
+          # Android 5+ reads drawable-v21 first; the template has a WHITE one, so overwrite it
+          mkdir -p "$RES/drawable-v21"
+          cp branding/android-res/drawable/launch_background.xml "$RES/drawable-v21/launch_background.xml"
+          ls "$RES"/mipmap-xxxhdpi
+
       # FIX: the old step used the Linux host compiler, which makes an x86 .so that Android
       # cannot load (the app silently fell back to Dart). Build with the Android NDK instead.
       - name: Compile C++ native library (Android NDK, arm64)
@@ -96,6 +105,9 @@ jobs:
           if os.path.exists(m):
               s = open(m).read()
               s = re.sub(r'android:label="[^"]*"', 'android:label="' + APP_NAME + '"', s, count=1)
+              if "android:roundIcon" not in s:
+                  s = s.replace('android:icon="@mipmap/ic_launcher"',
+                                'android:icon="@mipmap/ic_launcher"\n        android:roundIcon="@mipmap/ic_launcher_round"', 1)
               if "android.permission.INTERNET" not in s:
                   s = re.sub(r'(<manifest[^>]*>)',
                              r'\1\n    <uses-permission android:name="android.permission.INTERNET" />',
@@ -141,3 +153,4 @@ jobs:
           path: app/build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
           retention-days: 30
+

@@ -67,3 +67,4 @@ List<Seg> parseSegments(String s) {
 }
 
 List<FileSeg> completedFiles(String s) => parseSegments(s).whereType<FileSeg>().where((f) => f.done && f.name.isNotEmpty).toList();
+

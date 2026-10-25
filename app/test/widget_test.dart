@@ -8,7 +8,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const CourseDeepApp(supabaseConfigured: false));
     await tester.pump(const Duration(milliseconds: 400)); // the logo animates forever: no pumpAndSettle
-    expect(find.text('CourseDeep'), findsWidgets);
+    expect(find.textContaining('CourseDeep'), findsWidgets);
   });
 
   test('file blocks are parsed', () {
@@ -18,3 +18,4 @@ void main() {
     expect(s.whereType<FileSeg>().single.done, true);
   });
 }
+

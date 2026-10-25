@@ -49,14 +49,20 @@ class AiRequest {
     _client.close();
   }
 
-  Future<String> _payload(List<ChatMessage> history, bool search) async {
+  Future<String> _payload(List<ChatMessage> history, bool search, bool think, String lang) async {
     final h = history.where((m) => (m.isUser || m.isAssistant) && (m.text.trim().isNotEmpty || m.attachments.isNotEmpty)).toList();
     final recent = h.length > 10 ? h.sublist(h.length - 10) : h;
     final msgs = <Map<String, dynamic>>[];
     for (var i = 0; i < recent.length; i++) {
       final m = recent[i];
       final last = i == recent.length - 1;
-      final map = <String, dynamic>{'role': m.isUser ? 'user' : 'assistant', 'content': m.text};
+      var content = m.text;
+      if (!m.isUser) {
+        // DeepThink answers: send only the final answer back, not the reasoning section.
+        final cut = RegExp(r'^\s*\*{0,2}Thinking\*{0,2}:?[ \t]*\n[\s\S]*?\n---[ \t]*\n').firstMatch(content);
+        if (cut != null) content = content.substring(cut.end);
+      }
+      final map = <String, dynamic>{'role': m.isUser ? 'user' : 'assistant', 'content': content};
       if (m.isUser && m.attachments.isNotEmpty) {
         final sb = StringBuffer();
         final images = <String>[];
@@ -87,13 +93,13 @@ class AiRequest {
       msgs.add(map);
     }
     final rid = NativeService().hashHex('${DateTime.now().microsecondsSinceEpoch}${recent.isEmpty ? '' : recent.last.text}');
-    final body = await compute(encodeJsonIsolate, <String, dynamic>{'messages': msgs, 'search': search, 'stream': true, 'rid': rid});
+    final body = await compute(encodeJsonIsolate, <String, dynamic>{'messages': msgs, 'search': search, 'think': think, 'lang': lang, 'stream': true, 'rid': rid});
     if (body.length > 13500000) throw AiException('Your attachments are too large to send. Try fewer or smaller files.');
     return body;
   }
 
-  Stream<AiEvent> run(List<ChatMessage> history, {required bool search}) async* {
-    final body = await _payload(history, search);
+  Stream<AiEvent> run(List<ChatMessage> history, {required bool search, bool think = false, String lang = 'English'}) async* {
+    final body = await _payload(history, search, think, lang);
     var gotData = false;
     try {
       final req = http.Request('POST', Uri.parse(kBackendUrl))
@@ -183,3 +189,4 @@ class AiRequest {
     }
   }
 }
+

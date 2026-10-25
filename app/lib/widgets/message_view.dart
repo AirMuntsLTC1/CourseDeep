@@ -209,6 +209,41 @@ String _linkCitations(String t, List<Source> sources) {
   });
 }
 
+MarkdownStyleSheet mdSheet(BuildContext c, Pal pal, double fontSize) {
+  final cs = Theme.of(c).colorScheme;
+  final fs = fontSize;
+  TextStyle base({double? size, FontWeight? w}) => TextStyle(color: pal.text, fontSize: size ?? fs, height: 1.6, fontWeight: w);
+  return MarkdownStyleSheet.fromTheme(Theme.of(c)).copyWith(
+    p: base(),
+    pPadding: const EdgeInsets.only(bottom: 2),
+    h1: base(size: 24, w: FontWeight.w700),
+    h2: base(size: 21, w: FontWeight.w700),
+    h3: base(size: 18.5, w: FontWeight.w700),
+    h4: base(size: 17, w: FontWeight.w700),
+    strong: TextStyle(color: pal.text, fontWeight: FontWeight.w700),
+    em: TextStyle(color: pal.text, fontStyle: FontStyle.italic),
+    a: TextStyle(color: cs.primary, fontWeight: FontWeight.w600, decoration: TextDecoration.none),
+    listBullet: base(),
+    listIndent: 20,
+    blockSpacing: 12,
+    code: TextStyle(
+      color: cs.primary,
+      backgroundColor: pal.codeBg,
+      fontFamily: 'monospace',
+      fontSize: fs - 2.5,
+    ),
+    blockquote: base().copyWith(color: pal.dim),
+    blockquotePadding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
+    blockquoteDecoration: BoxDecoration(border: Border(left: BorderSide(color: cs.primary, width: 3))),
+    tableHead: base(size: 14.5, w: FontWeight.w700),
+    tableBody: base(size: 14.5),
+    tableBorder: TableBorder.all(color: pal.border, width: 1, borderRadius: BorderRadius.circular(10)),
+    tableCellsPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    horizontalRuleDecoration: BoxDecoration(border: Border(top: BorderSide(color: pal.border))),
+  );
+}
+
+
 class _AssistantBlock extends StatelessWidget {
   const _AssistantBlock({required this.msg, required this.isLast, required this.actions, required this.fontSize});
   final ChatMessage msg;
@@ -216,49 +251,17 @@ class _AssistantBlock extends StatelessWidget {
   final MessageActions actions;
   final double fontSize;
 
-  MarkdownStyleSheet _sheet(BuildContext c, Pal pal) {
-    final cs = Theme.of(c).colorScheme;
-    final fs = fontSize;
-    TextStyle base({double? size, FontWeight? w}) => TextStyle(color: pal.text, fontSize: size ?? fs, height: 1.6, fontWeight: w);
-    return MarkdownStyleSheet.fromTheme(Theme.of(c)).copyWith(
-      p: base(),
-      pPadding: const EdgeInsets.only(bottom: 2),
-      h1: base(size: 24, w: FontWeight.w700),
-      h2: base(size: 21, w: FontWeight.w700),
-      h3: base(size: 18.5, w: FontWeight.w700),
-      h4: base(size: 17, w: FontWeight.w700),
-      strong: TextStyle(color: pal.text, fontWeight: FontWeight.w700),
-      em: TextStyle(color: pal.text, fontStyle: FontStyle.italic),
-      a: TextStyle(color: cs.primary, fontWeight: FontWeight.w600, decoration: TextDecoration.none),
-      listBullet: base(),
-      listIndent: 20,
-      blockSpacing: 12,
-      code: TextStyle(
-        color: cs.primary,
-        backgroundColor: pal.codeBg,
-        fontFamily: 'monospace',
-        fontSize: fs - 2.5,
-      ),
-      blockquote: base().copyWith(color: pal.dim),
-      blockquotePadding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
-      blockquoteDecoration: BoxDecoration(border: Border(left: BorderSide(color: cs.primary, width: 3))),
-      tableHead: base(size: 14.5, w: FontWeight.w700),
-      tableBody: base(size: 14.5),
-      tableBorder: TableBorder.all(color: pal.border, width: 1, borderRadius: BorderRadius.circular(10)),
-      tableCellsPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      horizontalRuleDecoration: BoxDecoration(border: Border(top: BorderSide(color: pal.border))),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final pal = Pal.of(context);
     final cs = Theme.of(context).colorScheme;
-    final segs = msg.isError ? const <Seg>[] : parseSegments(_linkCitations(msg.text, msg.sources));
+    final ({String? think, String answer}) tk = msg.isError ? (think: null, answer: '') : splitThink(_linkCitations(msg.text, msg.sources));
+    final segs = msg.isError ? const <Seg>[] : parseSegments(tk.answer);
     final files = segs.whereType<FileSeg>().where((f) => f.done && f.name.isNotEmpty).toList();
     final waiting = msg.streaming && msg.text.isEmpty;
 
-    return Padding(
+    return RepaintBoundary(
+      child: Padding(
       padding: const EdgeInsets.only(top: 10, bottom: 14),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(
@@ -285,20 +288,14 @@ class _AssistantBlock extends StatelessWidget {
                 ]),
               ),
             if (msg.sources.isNotEmpty) _SourceStrip(sources: msg.sources, onOpen: actions.openLink),
+            if (tk.think != null)
+              ThinkBlock(text: tk.think!, streaming: msg.streaming && tk.answer.trim().isEmpty),
             if (msg.isError)
               _ErrorCard(text: msg.text, onRetry: isLast ? actions.regenerate : null)
             else
               for (final s in segs)
                 if (s is TextSeg && s.text.trim().isNotEmpty)
-                  MarkdownBody(
-                    data: s.text.trim(),
-                    softLineBreak: true,
-                    onTapLink: (text, href, title) {
-                      if (href != null && href.isNotEmpty) actions.openLink(href);
-                    },
-                    builders: {'pre': CodeBlockBuilder(pal, actions.copy)},
-                    styleSheet: _sheet(context, pal),
-                  )
+                  MdBlocks(text: s.text.trim(), fontSize: fontSize, actions: actions)
                 else if (s is FileSeg)
                   GeneratedFileCard(file: s, actions: actions),
             if (files.length > 1)
@@ -327,7 +324,7 @@ class _AssistantBlock extends StatelessWidget {
           ]),
         ),
       ]),
-    );
+    ));
   }
 }
 
@@ -583,6 +580,162 @@ class GeneratedFileCard extends StatelessWidget {
           IconButton.filledTonal(tooltip: 'Download', visualDensity: VisualDensity.compact, onPressed: () => actions.shareFile(file), icon: const Icon(Icons.download_rounded, size: 19)),
         ],
       ]),
+    );
+  }
+}
+
+
+// ───────────────────────── fast streaming markdown ─────────────────────────
+/// DeepThink answers start with "**Thinking** … ---" — split them so the reasoning can be folded.
+({String? think, String answer}) splitThink(String raw) {
+  final m = RegExp(r'^\s*\*{0,2}Thinking\*{0,2}:?[ \t]*\n').firstMatch(raw);
+  if (m == null) return (think: null, answer: raw);
+  final i = raw.indexOf('\n---', m.end);
+  if (i < 0) return (think: raw.substring(m.end).trim(), answer: '');
+  final end = raw.indexOf('\n', i + 4);
+  return (think: raw.substring(m.end, i).trim(), answer: end < 0 ? '' : raw.substring(end + 1));
+}
+
+final _listStart = RegExp(r'^(\s*[-*+]\s|\s*\d+[.)]\s|\s{2,}\S)');
+
+/// Splits markdown into blocks at blank lines (never inside ``` fences, and list items stay together).
+List<String> splitMdBlocks(String t) {
+  final out = <String>[];
+  var buf = <String>[];
+  var fence = false;
+  var pendingBlank = false;
+  void flush() {
+    if (buf.isNotEmpty) out.add(buf.join('\n'));
+    buf = <String>[];
+  }
+
+  for (final line in t.split('\n')) {
+    if (line.trimLeft().startsWith('```')) fence = !fence;
+    if (!fence && line.trim().isEmpty) {
+      pendingBlank = buf.isNotEmpty;
+      continue;
+    }
+    if (pendingBlank && !fence) {
+      pendingBlank = false;
+      if (!_listStart.hasMatch(line) || !(buf.isNotEmpty && _listStart.hasMatch(buf.first))) {
+        flush();
+      } else {
+        buf.add('');
+      }
+    }
+    buf.add(line);
+  }
+  flush();
+  return out;
+}
+
+/// Only the LAST block changes while the answer streams, so finished blocks are never re-parsed
+/// (re-parsing the whole answer 25x per second was the main source of dropped frames).
+/// Finished blocks keep the SAME widget instance, which Flutter skips when rebuilding.
+class MdBlocks extends StatefulWidget {
+  const MdBlocks({super.key, required this.text, required this.fontSize, required this.actions});
+  final String text;
+  final double fontSize;
+  final MessageActions actions;
+
+  @override
+  State<MdBlocks> createState() => _MdBlocksState();
+}
+
+class _MdBlocksState extends State<MdBlocks> {
+  final List<String> _keys = [];
+  final List<Widget> _widgets = [];
+
+  @override
+  Widget build(BuildContext context) {
+    final blocks = splitMdBlocks(widget.text);
+    final dark = Pal.of(context).isDark;
+    final fs = widget.fontSize;
+    for (var i = 0; i < blocks.length; i++) {
+      final k = '$dark|$fs|${blocks[i]}';
+      if (i < _keys.length && _keys[i] == k) continue; // unchanged -> same widget instance
+      final w = _MdBlock(key: ValueKey(i), text: blocks[i], fontSize: fs, actions: widget.actions);
+      if (i < _keys.length) {
+        _keys[i] = k;
+        _widgets[i] = w;
+      } else {
+        _keys.add(k);
+        _widgets.add(w);
+      }
+    }
+    if (_keys.length > blocks.length) {
+      _keys.length = blocks.length;
+      _widgets.length = blocks.length;
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: List<Widget>.of(_widgets));
+  }
+}
+
+class _MdBlock extends StatelessWidget {
+  const _MdBlock({super.key, required this.text, required this.fontSize, required this.actions});
+  final String text;
+  final double fontSize;
+  final MessageActions actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    return RepaintBoundary(
+      child: MarkdownBody(
+        data: text,
+        softLineBreak: true,
+        onTapLink: (t, href, title) {
+          if (href != null && href.isNotEmpty) actions.openLink(href);
+        },
+        builders: {'pre': CodeBlockBuilder(pal, actions.copy)},
+        styleSheet: mdSheet(context, pal, fontSize),
+      ),
+    );
+  }
+}
+
+/// DeepSeek-style foldable "Thought process".
+class ThinkBlock extends StatefulWidget {
+  const ThinkBlock({super.key, required this.text, required this.streaming});
+  final String text;
+  final bool streaming;
+  @override
+  State<ThinkBlock> createState() => _ThinkBlockState();
+}
+
+class _ThinkBlockState extends State<ThinkBlock> {
+  bool? _open; // null => follow streaming state
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final open = _open ?? widget.streaming;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        decoration: BoxDecoration(color: pal.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: pal.border)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => setState(() => _open = !open),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(children: [
+                Icon(Icons.psychology_alt_outlined, size: 18, color: cs.primary),
+                const SizedBox(width: 8),
+                Expanded(child: Text(widget.streaming ? 'Thinking…' : 'Thought process', style: TextStyle(color: pal.dim, fontSize: 13.5, fontWeight: FontWeight.w600))),
+                Icon(open ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 20, color: pal.dim),
+              ]),
+            ),
+          ),
+          if (open)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+              child: Text(widget.text, style: TextStyle(color: pal.dim, fontSize: 13.5, height: 1.5)),
+            ),
+        ]),
+      ),
     );
   }
 }
