@@ -7,6 +7,12 @@ class TextSeg extends Seg {
   final String text;
 }
 
+class ImageSeg extends Seg {
+  ImageSeg(this.name, this.content);
+  final String name;
+  final String content;
+}
+
 class FileSeg extends Seg {
   FileSeg(this.name, this.content, this.done);
   final String name;
@@ -60,7 +66,13 @@ List<Seg> parseSegments(String s) {
       out.add(FileSeg(name, _unfence(_trimPartial(s.substring(bodyStart), _close)), false));
       break;
     }
-    out.add(FileSeg(name, _unfence(s.substring(bodyStart, c)), true));
+    final content = _unfence(s.substring(bodyStart, c));
+    final ext = name.split('.').last.toLowerCase();
+    if (['svg', 'png', 'jpg', 'jpeg', 'gif'].contains(ext)) {
+      out.add(ImageSeg(name, content));
+    } else {
+      out.add(FileSeg(name, content, true));
+    }
     i = c + _close.length;
   }
   return out.isEmpty ? [TextSeg('')] : out;

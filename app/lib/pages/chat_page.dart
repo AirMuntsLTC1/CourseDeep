@@ -57,6 +57,7 @@ class _ChatPageState extends State<ChatPage> {
     openImage: _openImage,
     more: _moreSheet,
     shareFile: _shareFile,
+    shareImage: _shareImage,
     shareZip: _shareZip,
     previewFile: _previewFile,
   );
@@ -424,9 +425,19 @@ class _ChatPageState extends State<ChatPage> {
     ));
   }
 
+  Future<void> _shareImage(ImageSeg img) async {
+    try {
+      await FileService.saveImage(img);
+      _toast('Image saved to Downloads!');
+    } catch (e) {
+      _toast('Could not save image.');
+    }
+  }
+
   Future<void> _shareFile(FileSeg f) async {
     try {
-      await FileService.shareFile(f);
+      await FileService.saveFile(f);
+      _toast('File saved to Downloads!');
     } catch (e) {
       _toast('Could not share this file.');
     }
@@ -434,7 +445,8 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _shareZip(List<FileSeg> files) async {
     try {
-      await FileService.shareZip(files);
+      await FileService.saveZip(files);
+      _toast('ZIP saved to Downloads!');
     } catch (e) {
       _toast('Could not create the ZIP.');
     }

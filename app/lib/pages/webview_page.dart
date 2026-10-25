@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../theme/app_theme.dart';
@@ -117,14 +116,11 @@ class _WebViewPageState extends State<WebViewPage> {
                 } else if (v == 'copy') {
                   await Clipboard.setData(ClipboardData(text: _url));
                   if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copied'), duration: Duration(seconds: 1)));
-                } else if (v == 'share') {
-                  await SharePlus.instance.share(ShareParams(text: _url));
                 }
               },
               itemBuilder: (_) => const [
                 PopupMenuItem(value: 'browser', child: Text('Open in browser')),
                 PopupMenuItem(value: 'copy', child: Text('Copy link')),
-                PopupMenuItem(value: 'share', child: Text('Share')),
               ],
             ),
           ],

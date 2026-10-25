@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../models/chat_message.dart';
 import '../services/file_service.dart';
@@ -16,6 +17,7 @@ class MessageActions {
     required this.openImage,
     required this.more,
     required this.shareFile,
+    required this.shareImage,
     required this.shareZip,
     required this.previewFile,
   });
@@ -25,6 +27,7 @@ class MessageActions {
   final void Function(String path) openImage;
   final void Function(ChatMessage m) more;
   final void Function(FileSeg f) shareFile;
+  final void Function(ImageSeg img) shareImage;
   final void Function(List<FileSeg> files) shareZip;
   final void Function(FileSeg f) previewFile;
 }
@@ -297,7 +300,34 @@ class _AssistantBlock extends StatelessWidget {
                 if (s is TextSeg && s.text.trim().isNotEmpty)
                   MdBlocks(text: s.text.trim(), fontSize: fontSize, actions: actions)
                 else if (s is FileSeg)
-                  GeneratedFileCard(file: s, actions: actions),
+                  GeneratedFileCard(file: s, actions: actions)
+                else if (s is ImageSeg)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (s.name.endsWith('.svg'))
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: pal.surface,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: pal.border),
+                            ),
+                            child: SvgPicture.string(s.content),
+                          )
+                        else
+                          Text('Image: ${s.name}', style: TextStyle(color: pal.text)),
+                        const SizedBox(height: 8),
+                        FilledButton.tonalIcon(
+                          onPressed: () => actions.shareImage(s),
+                          icon: const Icon(Icons.download_rounded, size: 18),
+                          label: const Text('Download Image'),
+                        ),
+                      ],
+                    ),
+                  ),
             if (files.length > 1)
               Padding(
                 padding: const EdgeInsets.only(top: 4, bottom: 6),

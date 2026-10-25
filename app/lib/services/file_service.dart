@@ -4,7 +4,7 @@ import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:better_download_saver/better_download_saver.dart';
 import '../models/chat_message.dart';
 import '../util/segments.dart';
 import 'native_service.dart';
@@ -239,21 +239,25 @@ class FileService {
   static Future<String> base64Of(String path) => compute(_b64Isolate, path);
 
   // ───────────── files created BY the AI ─────────────
-  static Future<XFile> _writeOne(String name, String content) async {
-    final tmp = await getTemporaryDirectory();
-    final dir = await Directory(p.join(tmp.path, 'generated')).create(recursive: true);
-    final f = File(p.join(dir.path, _safe(p.basename(name))));
-    await f.writeAsString(content);
-    return XFile(f.path);
+
+  static Future<void> saveFile(FileSeg f) async {
+    final saver = BetterDownloadSaver();
+    await saver.saveToDownloads(
+      fileName: f.name,
+      bytes: Uint8List.fromList(utf8.encode(f.content)),
+    );
   }
 
-  static Future<void> shareFile(FileSeg f) async {
-    final x = await _writeOne(f.name, f.content);
-    await SharePlus.instance.share(ShareParams(files: [x], text: f.name));
+  static Future<void> saveImage(ImageSeg img) async {
+    final saver = BetterDownloadSaver();
+    await saver.saveToDownloads(
+      fileName: img.name,
+      bytes: Uint8List.fromList(utf8.encode(img.content)),
+    );
   }
 
   /// Several files are bundled into one ZIP (keeps folders).
-  static Future<void> shareZip(List<FileSeg> files, {String name = 'coursedeep-files.zip'}) async {
+  static Future<void> saveZip(List<FileSeg> files, {String name = 'coursedeep-files.zip'}) async {
     final arc = Archive();
     for (final f in files) {
       final clean = f.name.replaceAll('\\', '/').split('/').where((s) => s.isNotEmpty && s != '..' && s != '.').join('/');
@@ -261,11 +265,11 @@ class FileService {
       arc.addFile(ArchiveFile.bytes(clean.isEmpty ? 'file.txt' : clean, Uint8List.fromList(bytes)));
     }
     final data = ZipEncoder().encode(arc);
-    final tmp = await getTemporaryDirectory();
-    final dir = await Directory(p.join(tmp.path, 'generated')).create(recursive: true);
-    final z = File(p.join(dir.path, name));
-    await z.writeAsBytes(data);
-    await SharePlus.instance.share(ShareParams(files: [XFile(z.path)], text: name));
+    final saver = BetterDownloadSaver();
+    await saver.saveToDownloads(
+      fileName: name,
+      bytes: Uint8List.fromList(data),
+    );
   }
 }
 
