@@ -69,9 +69,13 @@ class ChatStore {
         if (remote.isNotEmpty) {
           // Merge: remote wins for updated_at, but keep any local-only chats
           final byId = <String, ChatSession>{};
-          for (final s in remote) byId[s.id] = s;
+          for (final s in remote) {
+            byId[s.id] = s;
+          }
           for (final s in local) {
-            if (!byId.containsKey(s.id)) byId[s.id] = s;
+            if (!byId.containsKey(s.id)) {
+              byId[s.id] = s;
+            }
           }
           final merged = byId.values.toList()..sort((a, b) => b.updated.compareTo(a.updated));
           // Persist the merged result locally so future loads are instant
@@ -138,7 +142,7 @@ class ChatStore {
         ));
       }
       for (final s in list) {
-        await save(s, now: true);
+        await _saveNow(s);
       }
       await prefs.remove('coursedeep_sessions_v1');
       return list;
