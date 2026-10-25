@@ -50,10 +50,31 @@ function buildProviders(): Provider[] {
     }))
   }
   oa('deepseek', 'DeepSeek', 'https://api.deepseek.com/chat/completions', env('DEEPSEEK_API_KEY'), env('MODEL_DEEPSEEK') || 'deepseek-chat', false, 100000)
+  // Cohere — OpenAI-compatible endpoint, 1000 req/month free (trial key), 20 RPM
+  oa('cohere', 'Cohere',
+     'https://api.cohere.ai/compatibility/v1/chat/completions',
+     env('COHERE_API_KEY'),
+     env('MODEL_COHERE') || 'command-r-plus',
+     false, 128000)
+
   oa('samba', 'SambaNova', 'https://api.sambanova.ai/v1/chat/completions', env('SAMBANOVA_API_KEY'), env('MODEL_SAMBANOVA') || 'Meta-Llama-3.3-70B-Instruct', false, 60000)
   oa('nvidia', 'NVIDIA NIM', 'https://integrate.api.nvidia.com/v1/chat/completions', env('NVIDIA_API_KEY'), env('MODEL_NVIDIA') || 'meta/llama-3.1-70b-instruct', false, 60000)
+  // Chutes.ai — open-weight models, community quotas, OpenAI-compatible
+  oa('chutes', 'Chutes',
+     'https://llm.chutes.ai/v1/chat/completions',
+     env('CHUTES_API_KEY'),
+     env('MODEL_CHUTES') || 'deepseek-ai/DeepSeek-V3-0324',
+     false, 64000)
+
   oa('nvidia-v', 'NVIDIA Vision', 'https://integrate.api.nvidia.com/v1/chat/completions', env('NVIDIA_API_KEY'), env('MODEL_NVIDIA_VISION') || 'meta/llama-3.2-90b-vision-instruct', true, 40000)
   oa('mistral', 'Mistral', 'https://api.mistral.ai/v1/chat/completions', env('MISTRAL_API_KEY'), env('MODEL_MISTRAL') || 'mistral-small-latest', false, 80000)
+  // Zhipu AI (GLM) — OpenAI-compatible, free tier for Flash models
+  oa('zhipu', 'Zhipu GLM',
+     'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+     env('ZHIPU_API_KEY'),
+     env('MODEL_ZHIPU') || 'glm-4.7-flash',
+     false, 128000)
+
   oa('mistral-v', 'Mistral Vision', 'https://api.mistral.ai/v1/chat/completions', env('MISTRAL_API_KEY'), env('MODEL_MISTRAL_VISION') || 'pixtral-12b-2409', true, 60000)
   oa('openrouter', 'OpenRouter', 'https://openrouter.ai/api/v1/chat/completions', env('OPENROUTER_API_KEY'), env('MODEL_OPENROUTER') || 'meta-llama/llama-3.1-8b-instruct:free', false, 40000, { 'HTTP-Referer': 'https://coursedeep.app', 'X-Title': 'CourseDeep' })
   oa('openrouter-v', 'OpenRouter Vision', 'https://openrouter.ai/api/v1/chat/completions', env('OPENROUTER_API_KEY'), env('MODEL_OPENROUTER_VISION') || 'google/gemma-4-26b-a4b-it:free', true, 40000, { 'HTTP-Referer': 'https://coursedeep.app', 'X-Title': 'CourseDeep' })
