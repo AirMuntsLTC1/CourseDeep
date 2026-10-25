@@ -155,16 +155,14 @@ class _EmailCodeLoginPageState extends State<EmailCodeLoginPage> {
         throw Exception('The code could not be verified.');
       }
 
-      final emailOtp = result['email_otp']?.toString();
-      if (emailOtp == null || emailOtp.isEmpty) {
-        throw Exception('The server did not return a sign-in code. Please request a new code.');
+      final tokenHash = result['token_hash']?.toString().trim();
+      if (tokenHash == null || tokenHash.isEmpty) {
+        throw Exception('The server did not return a sign-in token. Please try again.');
       }
 
-      // Supabase persists the resulting session and restores it on app restart.
       await Supabase.instance.client.auth.verifyOTP(
-        email: _email,
-        token: emailOtp,
-        type: OtpType.email,
+        tokenHash: tokenHash,
+        type: OtpType.magiclink,
       );
     } on TimeoutException {
       if (mounted) {
