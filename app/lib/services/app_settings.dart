@@ -13,6 +13,7 @@ class AppSettings extends ChangeNotifier {
   bool searchDefault = true;
   bool thinkDefault = false;
   bool haptics = true;
+  bool voiceEnabled = false;
 
   SharedPreferences? _p;
 
@@ -26,6 +27,7 @@ class AppSettings extends ChangeNotifier {
       searchDefault = p.getBool('search_default') ?? true;
       thinkDefault = p.getBool('think_default') ?? false;
       haptics = p.getBool('haptics') ?? true;
+      voiceEnabled = p.getBool('voice_enabled') ?? false;
     } catch (_) {}
   }
 
@@ -70,6 +72,11 @@ class AppSettings extends ChangeNotifier {
   Future<void> setHaptics(bool v) {
     haptics = v;
     return _save((p) => p.setBool('haptics', v));
+  }
+
+  Future<void> setVoiceEnabled(bool v) {
+    voiceEnabled = v;
+    return _save((p) => p.setBool('voice_enabled', v));
   }
 }
 

@@ -8,6 +8,7 @@ import '../models/project.dart';
 import '../services/ai_service.dart';
 import '../services/app_settings.dart';
 import '../services/file_service.dart';
+import '../services/voice_service.dart';
 import '../theme/app_theme.dart';
 import '../util/segments.dart';
 import '../widgets/brand.dart';
@@ -161,11 +162,15 @@ class _ProjectChatPageState extends State<ProjectChatPage> {
     if (mounted) {
       setState(() => _busy = false);
       _scrollEnd();
+      if (failure == null && reply.text.trim().isNotEmpty) {
+        VoiceService.I.speak(plainText(reply.text));
+      }
     }
   }
 
   void _stop() {
     haptic(HapticFeedback.mediumImpact);
+    VoiceService.I.stop();
     _req?.cancel();
   }
 

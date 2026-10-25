@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../services/app_settings.dart';
 import '../services/chat_store.dart';
+import '../services/voice_service.dart';
 import '../theme/app_theme.dart';
 import '../services/update_service.dart';
 import '../widgets/logo.dart';
@@ -219,6 +220,16 @@ class SettingsPage extends StatelessWidget {
                   title: const Text('Haptic feedback'),
                   value: s.haptics,
                   onChanged: s.setHaptics,
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.volume_up_rounded),
+                  title: const Text('Speak AI replies'),
+                  subtitle: const Text('Read each answer out loud (on-device voice)'),
+                  value: s.voiceEnabled,
+                  onChanged: (v) async {
+                    await s.setVoiceEnabled(v);
+                    if (!v) VoiceService.I.stop();
+                  },
                 ),
               ]),
 

@@ -14,6 +14,7 @@ import '../services/app_settings.dart';
 import '../services/chat_store.dart';
 import '../services/file_service.dart';
 import '../services/download_service.dart';
+import '../services/voice_service.dart';
 import '../widgets/home_view.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import '../theme/app_theme.dart';
@@ -392,11 +393,15 @@ class _ChatPageState extends State<ChatPage> {
       setState(() => _busy = false);
       _jumpIfStuck();
       haptic(HapticFeedback.lightImpact);
+      if (failure == null && reply.text.trim().isNotEmpty) {
+        VoiceService.I.speak(plainText(reply.text));
+      }
     }
   }
 
   void _stop() {
     haptic(HapticFeedback.mediumImpact);
+    VoiceService.I.stop();
     _req?.cancel();
   }
 
