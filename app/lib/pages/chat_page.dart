@@ -536,12 +536,20 @@ class _ChatPageState extends State<ChatPage> {
             ListTile(
               leading: Icon(Icons.logout_rounded, color: Theme.of(ctx).colorScheme.error),
               title: Text(
-                'Log out',
+                'Log out completely',
                 style: TextStyle(color: Theme.of(ctx).colorScheme.error, fontWeight: FontWeight.w600),
               ),
               onTap: () async {
-                Navigator.pop(ctx); // Close the settings sheet
-                await Supabase.instance.client.auth.signOut();
+                // 1. Close the settings menu
+                Navigator.pop(ctx); 
+                
+                // 2. Clear local session immediately so UI updates instantly
+                await Supabase.instance.client.auth.signOut(scope: SignOutScope.local);
+                
+                // 3. Attempt to revoke the token on the server (fails silently if offline)
+                try {
+                  await Supabase.instance.client.auth.signOut();
+                } catch (_) {}
               },
             ),
             const SizedBox(height: 10),
