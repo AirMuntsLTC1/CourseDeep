@@ -52,7 +52,7 @@ class AiRequest {
     _client.close();
   }
 
-  Future<String> _payload(List<ChatMessage> history, bool search, bool think, String lang) async {
+  Future<String> _payload(List<ChatMessage> history, bool search, bool think, String lang, String? projectContext) async {
     final h = history.where((m) => (m.isUser || m.isAssistant) && (m.text.trim().isNotEmpty || m.attachments.isNotEmpty)).toList();
     final recent = h.length > 10 ? h.sublist(h.length - 10) : h;
     final msgs = <Map<String, dynamic>>[];
@@ -96,13 +96,16 @@ class AiRequest {
       msgs.add(map);
     }
     final rid = NativeService().hashHex('${DateTime.now().microsecondsSinceEpoch}${recent.isEmpty ? '' : recent.last.text}');
-    final body = await compute(encodeJsonIsolate, <String, dynamic>{'messages': msgs, 'search': search, 'think': think, 'lang': lang, 'stream': true, 'rid': rid});
+    final body = await compute(encodeJsonIsolate, <String, dynamic>{
+      'messages': msgs, 'search': search, 'think': think, 'lang': lang, 'stream': true, 'rid': rid,
+      if (projectContext != null && projectContext.trim().isNotEmpty) 'projectContext': projectContext,
+    });
     if (body.length > 13500000) throw AiException('Your attachments are too large to send. Try fewer or smaller files.');
     return body;
   }
 
-  Stream<AiEvent> run(List<ChatMessage> history, {required bool search, bool think = false, String lang = 'English'}) async* {
-    final body = await _payload(history, search, think, lang);
+  Stream<AiEvent> run(List<ChatMessage> history, {required bool search, bool think = false, String lang = 'English', String? projectContext}) async* {
+    final body = await _payload(history, search, think, lang, projectContext);
     var gotData = false;
     try {
       final req = http.Request('POST', Uri.parse(kBackendUrl))

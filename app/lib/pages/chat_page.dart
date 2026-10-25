@@ -23,6 +23,7 @@ import '../widgets/composer.dart';
 import '../widgets/message_view.dart';
 import 'webview_page.dart';
 import 'settings_page.dart';
+import 'projects_page.dart';
 
 const int _kMaxAttachments = 6;
 
@@ -751,6 +752,35 @@ class _ChatPageState extends State<ChatPage> {
               ),
             ]),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: GestureDetector(
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const ProjectsPage()));
+              },
+              child: Container(
+                height: 46,
+                decoration: BoxDecoration(
+                  color: pal.surface2,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: pal.border),
+                ),
+                child: Row(children: [
+                  const SizedBox(width: 14),
+                  Icon(Icons.folder_special_rounded, color: pal.text, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text('Projects',
+                        style: TextStyle(color: pal.text, fontWeight: FontWeight.w600, fontSize: 14.5)),
+                  ),
+                  Icon(Icons.chevron_right_rounded, color: pal.dim, size: 20),
+                  const SizedBox(width: 8),
+                ]),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: GestureDetector(

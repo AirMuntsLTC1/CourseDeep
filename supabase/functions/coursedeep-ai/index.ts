@@ -519,8 +519,10 @@ async function run(body: any, emit: Emit, signal?: AbortSignal) {
   }
   if (signal?.aborted) return
 
-  // 2) system prompt (+ search context)
+  // 2) system prompt (+ project + search context)
   let system = buildSystem(sources.length > 0, hasBinary, String(body.lang || '').slice(0, 24), body.think === true)
+  const projectContext = String(body.projectContext ?? '').trim().slice(0, 8000)
+  if (projectContext) system = projectContext + '\n\n' + system
   if (sources.length) system += '\n\nSEARCH RESULTS:\n' + sources.map((s, i) => `[${i + 1}] ${s.title}\n${s.url}\n${s.snippet ?? ''}`).join('\n\n')
 
   // 3) choose providers
