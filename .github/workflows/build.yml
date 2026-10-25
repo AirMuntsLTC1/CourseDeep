@@ -110,9 +110,10 @@ jobs:
         working-directory: app
         run: flutter pub get
 
-      # ota_update 5.1.0 has no `namespace` in its build.gradle, which Android Gradle Plugin 8+ requires
-      # ("Namespace not specified" build error). Patch the downloaded plugin before building.
-      - name: Patch ota_update namespace (AGP 8 fix)
+      # ota_update 5.1.0 is an old plugin. With Android Gradle Plugin 8+ it needs two fixes:
+      #  1) a `namespace` ("Namespace not specified")
+      #  2) a modern compileSdk (it asks for SDK 28, which lacks android:attr/lStar -> "resource lStar not found")
+      - name: Patch ota_update (namespace + compileSdk for AGP 8)
         run: |
           python3 - << 'PY'
           import glob, os, re
@@ -123,14 +124,16 @@ jobs:
                   files += glob.glob(r + "/hosted/pub.dev/ota_update-*/android/build.gradle")
           for f in sorted(set(files)):
               s = open(f).read()
-              if "namespace" in s:
-                  print("already has namespace:", f)
-                  continue
-              m = open(os.path.join(os.path.dirname(f), "src/main/AndroidManifest.xml")).read()
-              pkg = (re.search(r'package="([^"]+)"', m) or [None, "sk.fourq.otaupdate"])[1]
-              s = re.sub(r'android\s*\{', 'android {\n    namespace "' + pkg + '"', s, count=1)
+              if "namespace" not in s:
+                  m = open(os.path.join(os.path.dirname(f), "src/main/AndroidManifest.xml")).read()
+                  pkg = (re.search(r'package="([^"]+)"', m) or [None, "sk.fourq.otaupdate"])[1]
+                  s = re.sub(r'android\s*\{', 'android {\n    namespace "' + pkg + '"', s, count=1)
+              s, n = re.subn(r'compileSdk(Version)?\s*=?\s*\d+', 'compileSdk 35', s)
+              if n == 0:
+                  s = re.sub(r'android\s*\{', 'android {\n    compileSdk 35', s, count=1)
               open(f, "w").write(s)
-              print("patched", f, "->", pkg)
+              print("patched", f)
+              print(s)
           if not files:
               raise SystemExit("ota_update build.gradle not found in pub cache")
           PY
