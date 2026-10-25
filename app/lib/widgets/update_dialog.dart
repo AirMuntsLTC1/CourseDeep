@@ -46,8 +46,6 @@ class _UpdateDialogState extends State<UpdateDialog> {
                 _progress = 1;
               });
               break;
-            case OtaStatus.INSTALLATION_DONE:
-              break;
             default:
               final permission = e.status == OtaStatus.PERMISSION_NOT_GRANTED_ERROR;
               setState(() {
