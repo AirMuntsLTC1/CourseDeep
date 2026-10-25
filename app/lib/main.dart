@@ -11,20 +11,50 @@ import 'widgets/brand.dart';
 const String _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const String _supabasePublishableKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Show our own logo screen on the very first frame; load everything behind it.
+  runApp(const _Boot());
+}
 
-  final configured = _supabaseUrl.startsWith('https://') && _supabasePublishableKey.isNotEmpty;
+class _Boot extends StatefulWidget {
+  const _Boot();
+  @override
+  State<_Boot> createState() => _BootState();
+}
 
-  // Run the two start-up jobs in parallel so the first frame is not delayed.
-  await Future.wait([
-    AppSettings.I.load(),
-    if (configured) Supabase.initialize(url: _supabaseUrl, publishableKey: _supabasePublishableKey),
-  ]);
+class _BootState extends State<_Boot> {
+  bool? _configured;
 
-  NativeService().init(); // load libcoursedeep.so (C++)
-  AiService.warmUp(); // free ping: wakes the edge function, uses no AI quota
-  runApp(CourseDeepApp(supabaseConfigured: configured));
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final configured = _supabaseUrl.startsWith('https://') && _supabasePublishableKey.isNotEmpty;
+    await Future.wait([
+      AppSettings.I.load(),
+      if (configured) Supabase.initialize(url: _supabaseUrl, publishableKey: _supabasePublishableKey),
+    ]);
+    NativeService().init(); // load libcoursedeep.so (C++)
+    AiService.warmUp(); // free ping: wakes the edge function, uses no AI quota
+    if (mounted) setState(() => _configured = configured);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _configured;
+    if (c != null) return CourseDeepApp(supabaseConfigured: c);
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Color(0xFF0B0B12),
+        body: Center(child: AiOrb(size: 96)),
+      ),
+    );
+  }
 }
 
 class CourseDeepApp extends StatelessWidget {

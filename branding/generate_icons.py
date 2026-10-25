@@ -101,11 +101,18 @@ save(glyph(288, 0.8).convert("RGBA"), f"{OUT}/drawable-nodpi/splash_logo.png")
 save(legacy(512), os.path.join(os.path.dirname(__file__), "logo_512.png"))
 
 os.makedirs(f"{OUT}/drawable", exist_ok=True)
+# No Android startup logo: the native splash is only the dark background. The app draws its
+# own logo screen instantly (see _Boot in main.dart), so there is no double-logo flash.
 open(f"{OUT}/drawable/launch_background.xml", "w").write('''<?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item><color android:color="#0B0B12"/></item>
-    <item><bitmap android:gravity="center" android:src="@drawable/splash_logo"/></item>
 </layer-list>
+''')
+open(f"{OUT}/drawable/splash_empty.xml", "w").write('''<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <size android:width="1dp" android:height="1dp"/>
+    <solid android:color="#00000000"/>
+</shape>
 ''')
 os.makedirs(f"{OUT}/values-v31", exist_ok=True)
 open(f"{OUT}/values-v31/styles.xml", "w").write('''<?xml version="1.0" encoding="utf-8"?>
@@ -113,9 +120,8 @@ open(f"{OUT}/values-v31/styles.xml", "w").write('''<?xml version="1.0" encoding=
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:windowSplashScreenBackground">#0B0B12</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
-        <item name="android:windowFullscreen">false</item>
-        <item name="android:windowDrawsSystemBarBackgrounds">false</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_empty</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#0B0B12</item>
     </style>
 </resources>
 ''')
