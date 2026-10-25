@@ -34,3 +34,14 @@ DeepThink toggle with a foldable "Thought process" block, Search toggle, greetin
 ## Honest limits
 - I could not compile Flutter here. Push, and if the GitHub Action shows an error line, send it to me.
 - "Real AI" quality depends on your providers (Groq, Gemini, DeepSeek …). DeepThink is prompt-based reasoning, not a separate reasoning model.
+
+## AI recycling (v2.2)
+Order: Groq (3 models) → Gemini (5 models) → DeepSeek → SambaNova → NVIDIA → Mistral → OpenRouter → Hugging Face → Cloudflare.
+If one hits its quota/limit (429/402) or errors, the next starts instantly; the exhausted one is skipped for the time it asks for (Retry-After). If all fail, the app waits 1.5 s and goes around again. If a model dies mid-answer, the next one continues the same answer.
+
+## Auto-update (v2.2)
+Every push to `main` publishes a GitHub Release (tag `v<version>.<build>`) with `CourseDeep.apk`. Settings → Check for updates downloads that APK immediately and opens the release page.
+Raise `version:` in `app/pubspec.yaml` (e.g. 2.2.0+6) for each new release, otherwise the app sees no newer version.
+
+### Stable signing key (one time, needed so updates install over the old app)
+GitHub repo → Settings → Secrets and variables → Actions → New repository secret → name `DEBUG_KEYSTORE_BASE64`, value = the whole text of `DEBUG_KEYSTORE_BASE64.txt`. Keep that text private. The first build with this key needs ONE uninstall of the old app; after that, updates install over it.

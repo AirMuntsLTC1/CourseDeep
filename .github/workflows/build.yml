@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write   # needed to publish the GitHub Release with the APK
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -61,6 +64,27 @@ jobs:
             native/coursedeep.cpp \
             -o app/android/app/src/main/jniLibs/arm64-v8a/libcoursedeep.so
           file app/android/app/src/main/jniLibs/arm64-v8a/libcoursedeep.so
+
+      # Same signing key on every build => the new APK installs OVER the old app (no uninstall).
+      # Create the secret once: see README ("Stable signing key").
+      - name: Install the stable signing key
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+            mkdir -p ~/.android
+            echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
+            echo "Stable signing key installed"
+          else
+            echo "::warning::DEBUG_KEYSTORE_BASE64 secret missing - updates will need an uninstall first"
+          fi
+
+      - name: Read app version
+        id: ver
+        run: |
+          V=$(grep -m1 '^version:' app/pubspec.yaml | sed 's/version:[[:space:]]*//')
+          echo "full=${V/+/.}" >> "$GITHUB_OUTPUT"
+          echo "App version: ${V/+/.}"
 
       - name: Cache pub packages
         uses: actions/cache@v4
@@ -139,7 +163,8 @@ jobs:
             --obfuscate \
             --split-debug-info=build/debug-info \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
-            --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
+            --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY" \
+            --dart-define=APP_VERSION="${{ steps.ver.outputs.full }}"
 
       - name: Report APK sizes
         working-directory: app
@@ -154,3 +179,16 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+
+      - name: Name the APK
+        run: cp app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk CourseDeep.apk
+
+      # The app's "Check for updates" reads THIS release and downloads CourseDeep.apk automatically.
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.full }}
+          name: CourseDeep ${{ steps.ver.outputs.full }}
+          body: "Automatic build of CourseDeep ${{ steps.ver.outputs.full }}. Install CourseDeep.apk."
+          files: CourseDeep.apk
+          make_latest: true

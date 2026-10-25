@@ -562,7 +562,6 @@ class _ChatPageState extends State<ChatPage> {
                             controller: _scroll,
                             physics: const ClampingScrollPhysics(),
                             addAutomaticKeepAlives: false,
-                            cacheExtent: 900,
                             padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                             itemCount: messages.length,
                             itemBuilder: (_, i) => MessageView(

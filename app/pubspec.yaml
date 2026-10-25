@@ -1,7 +1,7 @@
 name: coursedeep
 description: CourseDeep - AI assistant with web search, vision and file tools
 publish_to: 'none'
-version: 2.1.0+4
+version: 2.2.0+5
 environment:
   sdk: ">=3.0.0 <4.0.0"
 dependencies:

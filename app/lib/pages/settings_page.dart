@@ -77,36 +77,42 @@ class SettingsPage extends StatelessWidget {
       final r = await http.get(Uri.parse(kReleasesApi), headers: {'Accept': 'application/vnd.github+json'}).timeout(const Duration(seconds: 12));
       if (!c.mounted) return;
       if (r.statusCode == 404) {
-        _toast(c, 'You are on the latest version ($kAppVersion).');
+        _toast(c, 'No release has been published yet. You have version $kAppVersion.');
         return;
       }
       if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
-      final tag = (jsonDecode(r.body)['tag_name'] ?? '').toString().replaceFirst(RegExp(r'^[vV]'), '');
-      if (tag.isNotEmpty && _isNewer(tag, kAppVersion)) {
-        final go = await showDialog<bool>(
-          context: c,
-          builder: (d) => AlertDialog(
-            title: const Text('Update available'),
-            content: Text('CourseDeep $tag is available. You have $kAppVersion.'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Later')),
-              FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Download')),
-            ],
-          ),
-        );
-        if (go == true) await launchUrl(Uri.parse(kReleasesPage), mode: LaunchMode.externalApplication);
-      } else {
+      final j = jsonDecode(r.body) as Map;
+      final tag = (j['tag_name'] ?? '').toString().replaceFirst(RegExp(r'^[vV]'), '');
+      if (tag.isEmpty || !_isNewer(tag, kAppVersion)) {
         _toast(c, 'You are on the latest version ($kAppVersion).');
+        return;
       }
+      // Newer release: start the APK download immediately (no tap needed), then show the release page.
+      String? apk;
+      for (final a in (j['assets'] as List? ?? [])) {
+        final name = (a['name'] ?? '').toString().toLowerCase();
+        if (name.endsWith('.apk')) {
+          apk = a['browser_download_url']?.toString();
+          break;
+        }
+      }
+      final page = (j['html_url'] ?? kReleasesPage).toString();
+      _toast(c, apk != null ? 'Version $tag found — downloading the update…' : 'Version $tag found — opening the release page…');
+      if (apk != null) {
+        await launchUrl(Uri.parse(apk), mode: LaunchMode.externalApplication);
+        await Future<void>.delayed(const Duration(milliseconds: 900));
+      }
+      await launchUrl(Uri.parse(page), mode: LaunchMode.externalApplication);
     } catch (_) {
       if (c.mounted) _toast(c, 'Could not check for updates. Check your connection.');
     }
   }
 
+  // Compares versions like 2.1.0.4 (any number of parts).
   static bool _isNewer(String a, String b) {
-    List<int> p(String v) => v.split('.').map((e) => int.tryParse(e.replaceAll(RegExp(r'\D'), '')) ?? 0).toList();
+    List<int> p(String v) => v.split(RegExp(r'[.+\-]')).map((e) => int.tryParse(e.replaceAll(RegExp(r'\D'), '')) ?? 0).toList();
     final x = p(a), y = p(b);
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 4; i++) {
       final xi = i < x.length ? x[i] : 0, yi = i < y.length ? y[i] : 0;
       if (xi != yi) return xi > yi;
     }

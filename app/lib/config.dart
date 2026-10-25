@@ -11,6 +11,7 @@ const String kFallbackUrl = '';
 const String kAppKey = '';
 
 // Shown in Settings and compared with the latest GitHub release.
-const String kAppVersion = '2.1.0';
+// Injected by the GitHub build (pubspec version + build number, e.g. 2.1.0.4).
+const String kAppVersion = String.fromEnvironment('APP_VERSION', defaultValue: '2.2.0.5');
 const String kReleasesApi = 'https://api.github.com/repos/AirMuntsLTC1/CourseDeep/releases/latest';
 const String kReleasesPage = 'https://github.com/AirMuntsLTC1/CourseDeep/releases';

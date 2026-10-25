@@ -28,7 +28,7 @@ interface Provider {
 }
 interface Cand { id: string; name: string; open: (s: AbortSignal) => AsyncGenerator<string> }
 
-class HttpErr extends Error { constructor(public status: number, m: string) { super(m) } }
+class HttpErr extends Error { constructor(public status: number, m: string, public retryMs = 0) { super(m) } }
 
 // ───────────────────────── providers ─────────────────────────
 function buildProviders(): Provider[] {
@@ -36,10 +36,12 @@ function buildProviders(): Provider[] {
   const oa = (id: string, name: string, url: string, key: string, model: string, vision: boolean, ctx = 100000, headers?: Record<string, string>) => {
     if (key) L.push({ id: id + ':' + model, name, kind: 'openai', url, key, model, vision, ctx, headers })
   }
-  oa('groq', 'Groq', 'https://api.groq.com/openai/v1/chat/completions', env('GROQ_API_KEY'), env('MODEL_GROQ') || 'openai/gpt-oss-120b', false)
+  // Groq: each model has its own rate limit, so every one is a separate fallback slot
+  ;(env('MODEL_GROQ') || 'openai/gpt-oss-120b,llama-3.3-70b-versatile,openai/gpt-oss-20b').split(',').map((x) => x.trim()).filter(Boolean).forEach((m, i) =>
+    oa('groq', i === 0 ? 'Groq' : 'Groq ' + m.split('/').pop(), 'https://api.groq.com/openai/v1/chat/completions', env('GROQ_API_KEY'), m, false))
   // Gemini: newest first, each older model is a separate fallback entry
   if (env('GEMINI_API_KEY')) {
-    const models = (env('MODEL_GEMINI') || 'gemini-3.8-flash,gemini-3.6-flash,gemini-3.1-flash-lite').split(',').map((s) => s.trim()).filter(Boolean)
+    const models = (env('MODEL_GEMINI') || 'gemini-3.8-flash,gemini-3.6-flash,gemini-3.1-flash-lite,gemini-2.5-flash,gemini-2.5-flash-lite').split(',').map((s) => s.trim()).filter(Boolean)
     models.forEach((m, i) => L.push({
       id: 'gemini:' + m, name: i === 0 ? 'Gemini' : 'Gemini ' + m.replace('gemini-', ''), kind: 'gemini',
       url: `https://generativelanguage.googleapis.com/v1beta/models/${m}:streamGenerateContent?alt=sse`,
@@ -65,13 +67,21 @@ function buildProviders(): Provider[] {
 }
 
 // ───────────────────────── health memory (per warm instance) ─────────────────────────
-const cooldown = new Map<string, number>()
+const cooldown = new Map<string, number>() // temporarily out (quota / rate limit / error)
+const dead = new Map<string, number>() // key or model rejected (401/403/404): skip for a long time
 function markFail(id: string, e: unknown) {
   const s = e instanceof HttpErr ? e.status : 0
-  const ms = s === 429 ? 60_000 : s === 401 || s === 403 ? 900_000 : s === 404 ? 600_000 : s === 400 ? 120_000 : 15_000
+  const retry = e instanceof HttpErr ? e.retryMs : 0
+  if (s === 401 || s === 403 || s === 404) dead.set(id, Date.now() + 900_000)
+  // 429 = rate/quota limit, 402 = no credit. Respect the provider's own Retry-After when it sends one.
+  const ms = s === 429 ? Math.min(Math.max(retry, 45_000), 6 * 3600_000)
+    : s === 402 ? Math.min(Math.max(retry, 600_000), 6 * 3600_000)
+    : s === 401 || s === 403 ? 900_000 : s === 404 ? 600_000 : s === 400 || s === 413 ? 120_000 : 15_000
   cooldown.set(id, Date.now() + ms)
 }
 const healthy = (p: { id: string }) => (cooldown.get(p.id) ?? 0) < Date.now()
+const alive = (p: { id: string }) => (dead.get(p.id) ?? 0) < Date.now()
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 // ───────────────────────── message prep ─────────────────────────
 function sanitize(raw: InMsg[]): Msg[] {
@@ -214,7 +224,10 @@ function candidate(p: Provider, system: string, all: Msg[]): Cand {
           body: JSON.stringify({ model: p.model, stream: true, max_tokens: 5000, messages: openaiMsgs(p, system, msgs) }),
         })
       }
-      if (!res.ok) throw new HttpErr(res.status, (await res.text().catch(() => '')).slice(0, 160))
+      if (!res.ok) {
+        const ra = Number(res.headers.get('retry-after'))
+        throw new HttpErr(res.status, (await res.text().catch(() => '')).slice(0, 160), Number.isFinite(ra) && ra > 0 ? ra * 1000 : 0)
+      }
       for await (const data of sse(res)) {
         if (data === '[DONE]') return
         let j: any
@@ -231,8 +244,8 @@ function candidate(p: Provider, system: string, all: Msg[]): Cand {
 
 // Hedged race: start the best provider; if it has not produced a token after hedgeMs
 // (or fails) start the next one in parallel. First token wins, the rest are aborted.
-function race(cands: Cand[], hedgeMs: number, firstTokenMs: number, log: string[]) {
-  return new Promise<{ name: string; first: string; gen: AsyncGenerator<string>; abort: () => void }>((resolve, reject) => {
+function race(cands: Cand[], hedgeMs: number, firstTokenMs: number, log: string[], onFail?: (name: string) => void) {
+  return new Promise<{ id: string; name: string; first: string; gen: AsyncGenerator<string>; abort: () => void }>((resolve, reject) => {
     let next = 0, active = 0, done = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const ctrls: AbortController[] = []
@@ -256,13 +269,14 @@ function race(cands: Cand[], hedgeMs: number, firstTokenMs: number, log: string[
           if (done) { ctrl.abort(); return }
           done = true; clearTimeout(timer)
           ctrls.forEach((x) => { if (x !== ctrl) x.abort() })
-          resolve({ name: c.name, first: r.value, gen, abort: () => ctrl.abort() })
+          resolve({ id: c.id, name: c.name, first: r.value, gen, abort: () => ctrl.abort() })
         } catch (e) {
           clearTimeout(ft)
           if (done) return
           markFail(c.id, e)
           const m = e instanceof HttpErr ? `HTTP ${e.status}` : ctrl.signal.aborted ? 'timeout' : String((e as Error).message).slice(0, 60)
           log.push(`${c.name}: ${m}`)
+          onFail?.(c.name)
           active--; launch()
         }
       })()
@@ -308,25 +322,73 @@ async function run(body: any, emit: Emit, signal?: AbortSignal) {
   if (needPdf) pool = all.filter((p) => p.pdf).concat(all.filter((p) => !p.pdf && (needVision ? p.vision : !p.vision)))
   else if (needVision) pool = all.filter((p) => p.vision)
   else pool = all.filter((p) => !p.vision || p.kind === 'gemini') // vision-only models are not used for plain text
-  const ok = pool.filter(healthy)
-  const cands = (ok.length ? ok : pool).map((p) => candidate(p, system, msgs))
-  if (!cands.length) throw new Error('No AI provider is configured. Add API keys to Supabase secrets.')
+  const usable = pool.filter(alive)
+  if (!usable.length) throw new Error('No AI provider is configured. Add API keys to Supabase secrets.')
+  const fresh = usable.filter(healthy)
 
   emit({ t: 'status', s: 'thinking', text: needVision ? 'Looking at your image' : 'Thinking' })
   const log: string[] = []
-  const win = await race(cands, 3500, 14000, log)
+  let failed = 0
+  // A fails (quota / limit / error) -> B starts INSTANTLY -> C ... A slow provider (8 s without a
+  // token) is also overtaken. Providers that are out of quota are skipped for the time they ask for.
+  const onFail = (name: string) => { failed++; emit({ t: 'status', s: 'switching', text: `${name} is unavailable — switching AI` }) }
+
+  let win
+  try {
+    win = await race((fresh.length ? fresh : usable).map((p) => candidate(p, system, msgs)), 8000, 14000, log, onFail)
+  } catch (e) {
+    if (signal?.aborted) return
+    // RECYCLE: every provider failed once. Wait a moment and go around again (limits reset, hiccups pass).
+    emit({ t: 'status', s: 'retry', text: 'All AIs are busy — trying again' })
+    await sleep(1500)
+    const again = pool.filter(alive)
+    if (!again.length) throw e
+    win = await race(again.map((p) => candidate(p, system, msgs)), 8000, 20000, log, onFail)
+  }
   if (signal?.aborted) { win.abort(); return }
   emit({ t: 'status', s: 'writing', text: 'Writing' })
   emit({ t: 'delta', d: win.first })
-  try {
-    for await (const d of win.gen) {
-      if (signal?.aborted) { win.abort(); return }
-      emit({ t: 'delta', d })
+  let written = win.first
+  let winId = win.id, winName = win.name, gen = win.gen, abort = win.abort
+
+  // If the model dies in the MIDDLE of an answer, the next AI continues exactly where it stopped.
+  const tried = new Set<string>()
+  while (true) {
+    try {
+      for await (const d of gen) {
+        if (signal?.aborted) { abort(); return }
+        written += d
+        emit({ t: 'delta', d })
+      }
+      break
+    } catch (e) {
+      if (signal?.aborted) return
+      markFail(winId, e)
+      tried.add(winId)
+      const next = pool.filter((p) => alive(p) && !tried.has(p.id) && !(p.vision && p.kind !== 'gemini'))
+      let resumed = false
+      for (const p of next) {
+        try {
+          emit({ t: 'status', s: 'switching', text: `Connection lost — continuing with ${p.name}` })
+          const cont: Msg[] = [...msgs,
+            { role: 'assistant', text: written, images: [], files: [] },
+            { role: 'user', text: 'Continue your previous answer exactly where it stopped. Do not repeat anything and do not add an introduction.', images: [], files: [] }]
+          const c = candidate(p, system, cont)
+          const ctrl = new AbortController()
+          const g = c.open(ctrl.signal)
+          let r = await g.next()
+          while (!r.done && !r.value) r = await g.next()
+          if (r.done) throw new Error('empty reply')
+          emit({ t: 'delta', d: r.value }); written += r.value
+          gen = g; abort = () => ctrl.abort(); winId = p.id; winName = p.name
+          resumed = true
+          break
+        } catch (e2) { markFail(p.id, e2); tried.add(p.id) }
+      }
+      if (!resumed) { emit({ t: 'delta', d: '\n\n_…the connection to the AI was interrupted. Tap regenerate to continue._' }); break }
     }
-  } catch {
-    if (!signal?.aborted) emit({ t: 'delta', d: '\n\n_…the connection to the model was interrupted._' })
   }
-  emit({ t: 'done', provider: win.name, ms: Date.now() - t0 })
+  emit({ t: 'done', provider: failed || tried.size ? `${winName} (auto-switched)` : winName, ms: Date.now() - t0 })
 }
 
 // ───────────────────────── abuse protection ─────────────────────────
