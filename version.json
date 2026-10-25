@@ -1,5 +1,5 @@
 {
-  "version": "2.1.0",
+  "version": "2.4.0.8",
   "downloadUrl": "https://github.com/AirMuntsLTC1/CourseDeep/releases/download/v2.1.0/app-release.apk",
-  "description": "Fixed image generation, native downloads, and improved stability."
+  "description": "New: Projects with AI instructions, permanent chat storage, hold-to-speak voice input, polished New Chat icon, 21 AI providers."
 }
