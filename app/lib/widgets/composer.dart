@@ -53,6 +53,11 @@ class Composer extends StatelessWidget {
     required this.onSend,
     required this.onStop,
     required this.onRemove,
+    required this.onHoldStart,
+    required this.onHoldEnd,
+    required this.onHoldCancel,
+    this.holding = false,
+    this.liveText = '',
   });
 
   final TextEditingController controller;
@@ -62,6 +67,11 @@ class Composer extends StatelessWidget {
   final bool searchOn, thinkOn;
   final VoidCallback onToggleSearch, onToggleThink, onAttach, onSend, onStop;
   final void Function(Attachment) onRemove;
+  final VoidCallback onHoldStart;
+  final void Function(String finalText) onHoldEnd;
+  final VoidCallback onHoldCancel;
+  final bool holding;
+  final String liveText;
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +89,36 @@ class Composer extends StatelessWidget {
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: pal.isDark ? 0.35 : 0.06), blurRadius: 24, offset: const Offset(0, 8))],
         ),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
+          AnimatedSize(
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.bottomCenter,
+            child: !holding || liveText.isEmpty
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: cs.primary.withValues(alpha: 0.35)),
+                      ),
+                      child: Row(children: [
+                        Icon(Icons.graphic_eq_rounded, size: 16, color: cs.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            liveText,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: pal.text, fontSize: 13.5),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  ),
+          ),
           AnimatedSize(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
@@ -155,16 +195,26 @@ class Composer extends StatelessWidget {
                         : GestureDetector(
                             key: const ValueKey('send'),
                             onTap: ready ? onSend : null,
+                            onLongPressStart: (_) => onHoldStart(),
+                            onLongPressEnd: (_) => onHoldEnd(liveText),
+                            onLongPressCancel: onHoldCancel,
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 180),
-                              width: 40,
-                              height: 40,
+                              width: holding ? 52 : 40,
+                              height: holding ? 52 : 40,
                               decoration: BoxDecoration(
-                                gradient: ready ? Brand.gradient : null,
-                                color: ready ? null : pal.surface2,
+                                gradient: (holding || ready) ? Brand.gradient : null,
+                                color: (holding || ready) ? null : pal.surface2,
                                 shape: BoxShape.circle,
+                                boxShadow: holding
+                                    ? [BoxShadow(color: Brand.violet.withValues(alpha: 0.5), blurRadius: 20, spreadRadius: 3)]
+                                    : null,
                               ),
-                              child: Icon(Icons.arrow_upward_rounded, color: ready ? Colors.white : pal.dim, size: 22),
+                              child: Icon(
+                                holding ? Icons.mic_rounded : Icons.arrow_upward_rounded,
+                                color: (holding || ready) ? Colors.white : pal.dim,
+                                size: holding ? 26 : 22,
+                              ),
                             ),
                           ),
                   );
