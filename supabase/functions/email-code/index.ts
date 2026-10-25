@@ -223,9 +223,10 @@ Deno.serve(async (req) => {
         throw new Error("Unable to create a sign-in session.");
       }
 
-      const tokenHash = linkData?.properties?.hashed_token;
-      if (!tokenHash) {
-        throw new Error("Supabase did not return a sign-in token.");
+      // Use the email_otp instead of hashed_token to avoid PKCE flow mismatches
+      const emailOtp = linkData?.properties?.email_otp;
+      if (!emailOtp) {
+        throw new Error("Supabase did not return an email OTP.");
       }
 
       const { error: deleteError } = await db
@@ -239,7 +240,7 @@ Deno.serve(async (req) => {
         success: true,
         verified: true,
         email,
-        token_hash: tokenHash,
+        email_otp: emailOtp,
       });
     }
 
