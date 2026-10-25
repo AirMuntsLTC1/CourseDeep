@@ -33,14 +33,34 @@ String plainText(String raw) => parseSegments(raw).whereType<TextSeg>().map((t) 
 
 IconData iconFor(String name, {AttachKind? kind}) {
   final e = extOf(name);
-  if (kind == AttachKind.pdf || e == 'pdf') return Icons.picture_as_pdf_outlined;
-  if (kind == AttachKind.archive || e == 'zip') return Icons.folder_zip_outlined;
-  if (kind == AttachKind.document || ['docx', 'doc', 'xlsx', 'pptx'].contains(e)) return Icons.description_outlined;
-  if (['csv', 'tsv'].contains(e)) return Icons.table_chart_outlined;
-  if (['json', 'yaml', 'yml', 'xml', 'toml'].contains(e)) return Icons.data_object;
-  if (['html', 'css', 'js', 'ts', 'dart', 'py', 'java', 'kt', 'cpp', 'c', 'h', 'php', 'go', 'rs', 'sh', 'sql', 'jsx', 'tsx'].contains(e)) return Icons.code;
-  if (e == 'svg') return Icons.image_outlined;
-  return Icons.insert_drive_file_outlined;
+  if (kind == AttachKind.pdf || e == 'pdf') return Icons.picture_as_pdf_rounded;
+  if (kind == AttachKind.archive || e == 'zip') return Icons.folder_zip_rounded;
+  if (kind == AttachKind.document || ['docx', 'doc', 'xlsx', 'pptx'].contains(e)) return Icons.description_rounded;
+  if (['csv', 'tsv'].contains(e)) return Icons.table_chart_rounded;
+  if (['json', 'yaml', 'yml', 'xml', 'toml'].contains(e)) return Icons.data_object_rounded;
+  if (['html', 'css', 'js', 'ts', 'dart', 'py', 'java', 'kt', 'cpp', 'c', 'h', 'php', 'go', 'rs', 'sh', 'sql', 'jsx', 'tsx'].contains(e)) return Icons.terminal_rounded;
+  if (e == 'svg') return Icons.image_rounded;
+  return Icons.insert_drive_file_rounded;
+}
+
+// Helper for polished gradient icons
+(List<Color>, Color) _getFileStyle(String name, BuildContext context) {
+  final e = extOf(name);
+  final cs = Theme.of(context).colorScheme;
+  
+  if (e == 'zip' || e == 'rar' || e == 'tar') {
+    return ([const Color(0xFFFF9A44), const Color(0xFFFF6B6B)], Colors.white);
+  }
+  if (['dart', 'py', 'js', 'ts', 'cpp', 'c', 'h', 'java', 'php', 'go', 'rs', 'html', 'css'].contains(e)) {
+    return ([const Color(0xFF00B4DB), const Color(0xFF0083B0)], Colors.white);
+  }
+  if (e == 'pdf') {
+    return ([const Color(0xFFFF416C), const Color(0xFFFF4B2B)], Colors.white);
+  }
+  if (['docx', 'doc', 'xlsx', 'pptx', 'csv'].contains(e)) {
+    return ([const Color(0xFF11998E), const Color(0xFF38EF7D)], Colors.white);
+  }
+  return ([cs.primary, cs.tertiary], Colors.white);
 }
 
 class MessageView extends StatelessWidget {
@@ -475,16 +495,31 @@ class _CodeBox extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Container(
-          padding: const EdgeInsets.fromLTRB(14, 4, 6, 4),
-          color: pal.surface2.withValues(alpha: 0.7),
+          padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+          decoration: BoxDecoration(
+            color: pal.surface2.withValues(alpha: 0.8),
+            border: Border(bottom: BorderSide(color: pal.border)),
+          ),
           child: Row(children: [
-            Text(lang.isEmpty ? 'code' : lang, style: TextStyle(color: pal.dim, fontSize: 12, fontWeight: FontWeight.w600)),
+            Icon(Icons.terminal_rounded, size: 16, color: pal.dim),
+            const SizedBox(width: 8),
+            Text(
+              lang.isEmpty ? 'code' : lang.toUpperCase(), 
+              style: TextStyle(color: pal.dim, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+            ),
             const Spacer(),
             TextButton.icon(
-              style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: pal.dim),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact, 
+                foregroundColor: pal.text,
+                backgroundColor: pal.surface,
+                side: BorderSide(color: pal.border),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+              ),
               onPressed: () => onCopy(code),
-              icon: const Icon(Icons.content_copy_rounded, size: 14),
-              label: const Text('Copy', style: TextStyle(fontSize: 12)),
+              icon: const Icon(Icons.content_copy_rounded, size: 13),
+              label: const Text('Copy', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
             ),
           ]),
         ),
@@ -509,22 +544,30 @@ class GeneratedFileCard extends StatelessWidget {
     final pal = Pal.of(context);
     final cs = Theme.of(context).colorScheme;
     final name = file.name.isEmpty ? 'file' : file.name;
+    final (grad, fg) = _getFileStyle(name, context);
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 6),
+      margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: pal.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: file.done ? cs.primary.withValues(alpha: 0.35) : pal.border),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: file.done ? pal.border : cs.primary.withValues(alpha: 0.4)),
+        boxShadow: file.done ? [
+          BoxShadow(color: Colors.black.withValues(alpha: pal.isDark ? 0.2 : 0.04), blurRadius: 10, offset: const Offset(0, 4))
+        ] : null,
       ),
       child: Row(children: [
         Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(gradient: Brand.gradient, borderRadius: BorderRadius.circular(12)),
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: grad, begin: Alignment.topLeft, end: Alignment.bottomRight),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [BoxShadow(color: grad.first.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 3))],
+          ),
           child: file.done
-              ? Icon(iconFor(name), color: Colors.white, size: 22)
-              : const Padding(padding: EdgeInsets.all(11), child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white)),
+              ? Icon(iconFor(name), color: fg, size: 24)
+              : Padding(padding: const EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2.2, color: fg)),
         ),
         const SizedBox(width: 12),
         Expanded(
