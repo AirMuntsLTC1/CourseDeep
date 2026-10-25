@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/chat_message.dart';
 import '../services/ai_service.dart';
 import '../services/chat_store.dart';
@@ -531,6 +532,18 @@ class _ChatPageState extends State<ChatPage> {
               subtitle: Text('Version 2.0.0 — 11 AI Fallbacks', style: TextStyle(color: pal.dim)),
               onTap: () => Navigator.pop(ctx),
             ),
+            const Divider(),
+            ListTile(
+              leading: Icon(Icons.logout_rounded, color: Theme.of(ctx).colorScheme.error),
+              title: Text(
+                'Log out',
+                style: TextStyle(color: Theme.of(ctx).colorScheme.error, fontWeight: FontWeight.w600),
+              ),
+              onTap: () async {
+                Navigator.pop(ctx); // Close the settings sheet
+                await Supabase.instance.client.auth.signOut();
+              },
+            ),
             const SizedBox(height: 10),
           ],
         ),
@@ -688,9 +701,30 @@ class _ChatPageState extends State<ChatPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
             child: Row(children: [
-              const AiMark(size: 34),
+              CircleAvatar(
+                radius: 17,
+                backgroundColor: cs.primary,
+                child: Text(
+                  (Supabase.instance.client.auth.currentUser?.email ?? 'U')[0].toUpperCase(),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
               const SizedBox(width: 12),
-              Text('CourseDeep', style: TextStyle(color: pal.text, fontSize: 21, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
+              Expanded(
+                child: Text(
+                  Supabase.instance.client.auth.currentUser?.email ?? 'User',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: pal.text, fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Log Out',
+                icon: Icon(Icons.logout_rounded, color: pal.dim, size: 20),
+                onPressed: () async {
+                  await Supabase.instance.client.auth.signOut();
+                },
+              ),
             ]),
           ),
           Padding(
