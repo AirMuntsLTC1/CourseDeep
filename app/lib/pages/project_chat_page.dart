@@ -9,6 +9,7 @@ import '../services/ai_service.dart';
 import '../services/app_settings.dart';
 import '../services/file_service.dart';
 import '../services/voice_service.dart';
+import '../services/speech_service.dart';
 import '../theme/app_theme.dart';
 import '../util/segments.dart';
 import '../widgets/brand.dart';
@@ -31,6 +32,8 @@ class _ProjectChatPageState extends State<ProjectChatPage> {
   bool _dirty = false;
   bool _busy = false;
   bool _stick = true;
+  bool _holding = false;
+  String _liveText = '';
 
   late final MessageActions _actions = MessageActions(
     openLink: _openLink,
@@ -81,6 +84,55 @@ class _ProjectChatPageState extends State<ProjectChatPage> {
         _scroll.jumpTo(max);
       }
     });
+  }
+
+  Future<void> _holdStart() async {
+    if (_busy) return;
+    haptic(HapticFeedback.selectionClick);
+    final ok = await SpeechService.I.start(
+      onPartial: (t) {
+        if (!mounted) return;
+        setState(() => _liveText = t);
+      },
+      onFinal: (t) {
+        if (!mounted) return;
+        setState(() {
+          _holding = false;
+          _liveText = '';
+          _input.text = t;
+        });
+        if (t.trim().isNotEmpty) _send();
+      },
+    );
+    if (ok && mounted) setState(() => _holding = true);
+  }
+
+  void _holdEnd(String finalText) {
+    if (!_holding) return;
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted && _holding) {
+        SpeechService.I.stop();
+        final t = (_liveText.isNotEmpty ? _liveText : finalText).trim();
+        setState(() {
+          _holding = false;
+          _liveText = '';
+        });
+        if (t.isNotEmpty) {
+          _input.text = t;
+          _send();
+        }
+      }
+    });
+  }
+
+  void _holdCancel() {
+    SpeechService.I.cancel();
+    if (mounted) {
+      setState(() {
+        _holding = false;
+        _liveText = '';
+      });
+    }
   }
 
   Future<void> _send() async {
@@ -371,7 +423,25 @@ class _ProjectChatPageState extends State<ProjectChatPage> {
   }
 
   Widget _composer(Pal pal, ColorScheme cs) {
-    return Container(
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      if (_holding && _liveText.isNotEmpty)
+        Container(
+          margin: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: cs.primary.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: cs.primary.withValues(alpha: 0.35)),
+          ),
+          child: Row(children: [
+            Icon(Icons.graphic_eq_rounded, size: 16, color: cs.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(_liveText, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: pal.text, fontSize: 13.5)),
+            ),
+          ]),
+        ),
+      Container(
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
       padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
       decoration: BoxDecoration(
@@ -401,21 +471,32 @@ class _ProjectChatPageState extends State<ProjectChatPage> {
           padding: const EdgeInsets.only(bottom: 2, right: 2),
           child: GestureDetector(
             onTap: _busy ? _stop : _send,
-            child: Container(
-              width: 40,
-              height: 40,
+            onLongPressStart: _busy ? null : (_) => _holdStart(),
+            onLongPressEnd: _busy ? null : (_) => _holdEnd(_liveText),
+            onLongPressCancel: _busy ? null : _holdCancel,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: _holding ? 52 : 40,
+              height: _holding ? 52 : 40,
               decoration: BoxDecoration(
-                gradient: _busy ? null : Brand.gradient,
-                color: _busy ? pal.text : null,
+                gradient: (_busy || _holding) ? null : Brand.gradient,
+                color: _holding ? Brand.violet : _busy ? pal.text : null,
                 shape: BoxShape.circle,
+                boxShadow: _holding
+                    ? [BoxShadow(color: Brand.violet.withValues(alpha: 0.5), blurRadius: 20, spreadRadius: 3)]
+                    : null,
               ),
-              child: Icon(_busy ? Icons.stop_rounded : Icons.arrow_upward_rounded,
-                  color: _busy ? pal.bg : Colors.white, size: 22),
+              child: Icon(
+                _holding ? Icons.mic_rounded : _busy ? Icons.stop_rounded : Icons.arrow_upward_rounded,
+                color: _holding ? Colors.white : _busy ? pal.bg : Colors.white,
+                size: _holding ? 26 : 22,
+              ),
             ),
           ),
         ),
       ]),
-    );
+    ),
+    ]);
   }
 }
 

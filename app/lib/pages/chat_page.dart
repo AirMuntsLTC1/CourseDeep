@@ -15,6 +15,7 @@ import '../services/chat_store.dart';
 import '../services/file_service.dart';
 import '../services/download_service.dart';
 import '../services/voice_service.dart';
+import '../services/speech_service.dart';
 import '../widgets/home_view.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import '../theme/app_theme.dart';
@@ -56,6 +57,8 @@ class _ChatPageState extends State<ChatPage> {
   AiRequest? _req;
   Timer? _flush;
   bool _dirty = false;
+  bool _holding = false;
+  String _liveText = '';
 
   late final MessageActions _actions = MessageActions(
     openLink: _openLink,
@@ -287,6 +290,55 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   // ───────────────────────── send / stream ─────────────────────────
+  Future<void> _holdStart() async {
+    if (_busy) return;
+    haptic(HapticFeedback.selectionClick);
+    final ok = await SpeechService.I.start(
+      onPartial: (t) {
+        if (!mounted) return;
+        setState(() => _liveText = t);
+      },
+      onFinal: (t) {
+        if (!mounted) return;
+        setState(() {
+          _holding = false;
+          _liveText = '';
+          _input.text = t;
+        });
+        if (t.trim().isNotEmpty) _send();
+      },
+    );
+    if (ok && mounted) setState(() => _holding = true);
+  }
+
+  void _holdEnd(String finalText) {
+    if (!_holding) return;
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted && _holding) {
+        SpeechService.I.stop();
+        final t = (_liveText.isNotEmpty ? _liveText : finalText).trim();
+        setState(() {
+          _holding = false;
+          _liveText = '';
+        });
+        if (t.isNotEmpty) {
+          _input.text = t;
+          _send();
+        }
+      }
+    });
+  }
+
+  void _holdCancel() {
+    SpeechService.I.cancel();
+    if (mounted) {
+      setState(() {
+        _holding = false;
+        _liveText = '';
+      });
+    }
+  }
+
   Future<void> _send([String? preset]) async {
     if (_busy) return;
     final text = (preset ?? _input.text).trim();
@@ -666,6 +718,11 @@ class _ChatPageState extends State<ChatPage> {
               onSend: () => _send(),
               onStop: _stop,
               onRemove: (a) => setState(() => _pending.remove(a)),
+              onHoldStart: _holdStart,
+              onHoldEnd: _holdEnd,
+              onHoldCancel: _holdCancel,
+              holding: _holding,
+              liveText: _liveText,
             ),
           ]),
         ),
