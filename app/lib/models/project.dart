@@ -64,7 +64,7 @@ class Project {
           continue;
         }
         final body = f.text!;
-        final snippet = body.length > room ? body.substring(0, room) + '\n…[truncated]' : body;
+        final snippet = body.length > room ? '${body.substring(0, room)}\n…[truncated]' : body;
         b.writeln('\n--- ${f.name} ---\n$snippet');
         used += snippet.length;
       }

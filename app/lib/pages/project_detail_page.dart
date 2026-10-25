@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 import '../models/project.dart';
 import '../services/file_service.dart';
 import '../services/project_store.dart';
@@ -52,18 +51,13 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
   Future<void> _importFiles() async {
     setState(() => _busy = true);
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['zip', 'txt', 'md', 'markdown', 'csv', 'json', 'html', 'css', 'js', 'dart', 'py', 'java', 'cpp', 'c', 'h'],
-        allowMultiple: true,
-        withData: false,
-      );
-      if (result == null || result.files.isEmpty) {
+      final files = await FilePicker.pickFiles(type: FileType.any);
+      if (files.isEmpty) {
         if (mounted) setState(() => _busy = false);
         return;
       }
       var added = 0;
-      for (final f in result.files) {
+      for (final f in files) {
         if (f.path == null) continue;
         final extracted = await _extract(f.name, f.path!);
         if (extracted != null) {
@@ -97,11 +91,15 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
           if (!const {
             'txt', 'md', 'markdown', 'csv', 'json', 'yaml', 'yml', 'xml', 'html', 'css', 'js', 'ts', 'dart',
             'py', 'java', 'kt', 'cpp', 'c', 'h', 'hpp', 'go', 'rs', 'rb', 'php', 'sh', 'sql'
-          }.contains(ee)) continue;
+          }.contains(ee)) {
+            continue;
+          }
           try {
             final c = utf8.decode((e.content as List).cast<int>(), allowMalformed: true);
             sb.writeln('--- ${e.name} ---\n$c\n');
-            if (sb.length > 50000) break;
+            if (sb.length > 50000) {
+            break;
+          }
           } catch (_) {}
         }
         final text = sb.toString();
@@ -284,7 +282,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                 child: _ActionButton(
                   icon: Icons.psychology_alt_rounded,
                   label: 'Instructions',
-                  sub: '${_project.instructions.trim().isEmpty ? "None yet" : "Saved"}',
+                  sub: _project.instructions.trim().isEmpty ? 'None yet' : 'Saved',
                   onTap: _editInstructions,
                 ),
               ),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,6 +9,7 @@ import '../services/ai_service.dart';
 import '../services/app_settings.dart';
 import '../services/file_service.dart';
 import '../theme/app_theme.dart';
+import '../util/segments.dart';
 import '../widgets/brand.dart';
 import '../widgets/message_view.dart';
 import 'webview_page.dart';
@@ -148,7 +150,7 @@ class _ProjectChatPageState extends State<ProjectChatPage> {
         reply.role = 'error';
         reply.text = failure;
       } else {
-        reply.append('\n\n_…$failure_');
+        reply.append('\n\n_…${failure}_');
       }
     } else if (reply.text.trim().isEmpty) {
       reply.role = 'error';
